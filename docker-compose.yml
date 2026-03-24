@@ -1,0 +1,55 @@
+services:
+  migrator:
+    container_name: conciliador-migrator
+    image: conciliador-migrator
+    build:
+      dockerfile: dev.Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
+    volumes:
+      - ./:/opt/www
+    ports:
+      - "9501:9501"
+    environment:
+      - APP_ENV=dev
+      - SCAN_CACHEABLE=false
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - conciliador-net
+
+  postgres:
+    container_name: conciliador-migrator-postgres
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-conciliador}
+      POSTGRES_USER: ${DB_USERNAME:-conciliador}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-conciliador}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - conciliador-net
+
+  redis:
+    container_name: conciliador-migrator-redis
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - conciliador-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  conciliador-net:
+    name: conciliador-net
+    driver: bridge

@@ -1,0 +1,32 @@
+# Use this to connect to the EXISTING Conciliador Web database
+# Run: docker compose -f docker-compose.shared.yml up -d
+#
+# Requires conciliadorweb's docker network to be running.
+# Connects to the same PostgreSQL and Redis instances.
+
+services:
+  migrator:
+    container_name: conciliador-migrator
+    image: conciliador-migrator
+    build:
+      dockerfile: dev.Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
+    volumes:
+      - ./:/opt/www
+    ports:
+      - "9501:9501"
+    environment:
+      - APP_ENV=dev
+      - SCAN_CACHEABLE=false
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6380
+    networks:
+      - conciliadorweb_default
+
+networks:
+  conciliadorweb_default:
+    external: true

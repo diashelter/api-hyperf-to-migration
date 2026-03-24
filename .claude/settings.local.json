@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(curl -s http://localhost:9501/health)",
+      "Bash(find /Users/helterdias/Documents/conciliador-migrator/config/autoload -name *.php)",
+      "Bash(grep -r translation /Users/helterdias/Documents/conciliador-migrator/config/autoload/*.php)",
+      "Bash(grep -l \"class.*Rule\" /Users/helterdias/Documents/conciliador-migrator/vendor/hyperf/validation/src/Rules/*.php)",
+      "Bash(grep \"\\\\.php$\")",
+      "Bash(grep -l \"validator\\\\|validation\\\\|translation\" /Users/helterdias/Documents/conciliador-migrator/config/autoload/*.php)",
+      "Bash(find /Users/helterdias/Documents/conciliador-migrator/app -name *FormRequest* -o -name *Request.php)",
+      "Bash(ls /Users/helterdias/Documents/conciliador-migrator/vendor/hyperf/validation/src/Rules/*.php)",
+      "Bash(xargs -I {} basename {})"
+    ]
+  }
+}

@@ -1,0 +1,92 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controller\Migration;
+
+use App\Controller\AbstractMigrationController;
+use App\Middleware\ApiTokenMiddleware;
+use App\Middleware\RateLimitMiddleware;
+use Hyperf\HttpServer\Annotation\Controller;
+use Hyperf\HttpServer\Annotation\Middlewares;
+use Hyperf\HttpServer\Annotation\PostMapping;
+use OpenApi\Attributes as OA;
+
+#[Controller(prefix: '/api/v1/migration')]
+#[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
+class ImportSessionMigrationController extends AbstractMigrationController
+{
+    protected function getTable(): string
+    {
+        return 'import_sessions';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'import_sessions';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 200;
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'original_file_name' => 'required|string|max:255',
+            'file_name'          => 'required|string',
+            'date_to_create'     => 'nullable|string',
+            'size'               => 'nullable|integer',
+        ];
+    }
+
+    #[OA\Post(
+        path: '/api/v1/migration/import-sessions',
+        summary: 'Migrar sessões de importação',
+        description: 'Insere sessões de importação em lote (síncrono). Fase 8 — depende de imports, layouts. Max batch: 200. FK legados: legacy_import_id, legacy_layout_id.',
+        tags: ['Migration - Sync'],
+        security: [['bearerAuth' => []]],
+        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(ref: '#/components/schemas/MigrationBatchRequest')
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Migração concluída', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+        ]
+    )]
+    #[PostMapping(path: 'import-sessions')]
+    public function migrate(): array
+    {
+        $batch = $this->request->input('batch', []);
+
+        if (empty($batch)) {
+            return ['error' => 'Empty batch', 'code' => 422];
+        }
+
+        if (\count($batch) > $this->getMaxBatchSize()) {
+            return ['error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}", 'code' => 422];
+        }
+
+        return $this->syncMigrate();
+    }
+
+    protected function resolveForeignKeys(array $record, string $contractId): array
+    {
+        if (! empty($record['legacy_import_id'])) {
+            $record['import_id'] = $this->idMappingService->resolve('imports', $record['legacy_import_id'], $contractId) ?? $record['import_id'] ?? null;
+            unset($record['legacy_import_id']);
+        }
+
+        if (! empty($record['legacy_layout_id'])) {
+            $record['layout_id'] = $this->idMappingService->resolve('layouts', $record['legacy_layout_id'], $contractId) ?? $record['layout_id'] ?? null;
+            unset($record['legacy_layout_id']);
+        }
+
+        return $record;
+    }
+}
