@@ -11,11 +11,13 @@ use Hyperf\DbConnection\Db;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
+use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
 use Ramsey\Uuid\Uuid;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
+#[HyperfServer('http')]
 class ImportRecordMigrationController extends AbstractMigrationController
 {
     protected function getTable(): string
@@ -101,11 +103,47 @@ DESC,
                 properties: [
                     new OA\Property(property: 'batch', type: 'array', items: new OA\Items(type: 'object')),
                     new OA\Property(property: 'finalize', type: 'boolean', nullable: true, description: 'Se true, atualiza status de import_sessions e imports após o insert (usar no último batch de cada sessão)', example: false),
+                ],
+                example: [
+                    'batch' => [
+                        [
+                            'legacy_id'                    => 'IR-0001',
+                            'date'                         => '2024-01-10',
+                            'history'                      => 'Pagamento fornecedor',
+                            'debit_value'                  => 1500.00,
+                            'credit_value'                 => null,
+                            'num_doc'                      => 'NF-001234',
+                            'client_supplier'              => 'Fornecedor ABC',
+                            'cpf_cnpj'                     => '11222333000181',
+                            'debit_account'                => '41001',
+                            'credit_account'               => '11001',
+                            'legacy_import_id'             => 'IMP-001',
+                            'legacy_import_session_id'     => 'IS-001',
+                        ],
+                    ],
+                    'finalize' => false,
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: 'Migração processada', content: new OA\JsonContent(ref: '#/components/schemas/AsyncMigrationResponse')),
+            new OA\Response(
+                response: 200,
+                description: 'Migração processada',
+                content: new OA\JsonContent(
+                    ref: '#/components/schemas/AsyncMigrationResponse',
+                    example: [
+                        'migration_batch_id' => '770e8400-e29b-41d4-a716-446655440002',
+                        'entity'             => 'import_records',
+                        'total_received'     => 1,
+                        'status'             => 'completed',
+                        'inserted'           => 1,
+                        'failed'             => 0,
+                        'errors'             => null,
+                        'id_mappings'        => ['IR-0001' => 'kkk11111-0000-0000-0000-000000000001'],
+                        'status_url'         => '/api/v1/migration/status/770e8400-e29b-41d4-a716-446655440002',
+                    ]
+                )
+            ),
             new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),

@@ -10,10 +10,12 @@ use App\Middleware\RateLimitMiddleware;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
+use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
+#[HyperfServer('http')]
 class LayoutMigrationController extends AbstractMigrationController
 {
     protected function getTable(): string
@@ -85,10 +87,40 @@ class LayoutMigrationController extends AbstractMigrationController
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
         requestBody: new OA\RequestBody(
             required: true,
-            content: new OA\JsonContent(ref: '#/components/schemas/MigrationBatchRequest')
+            content: new OA\JsonContent(
+                ref: '#/components/schemas/MigrationBatchRequest',
+                example: [
+                    'batch' => [
+                        [
+                            'legacy_id'          => 'LAY-001',
+                            'name'               => 'Layout Extrato CSV',
+                            'format'             => 'CSV',
+                            'movement_type'      => 'Ambos',
+                            'start_row'          => 2,
+                            'date_column'        => 'A',
+                            'history_column'     => 'B',
+                            'debit_value_column' => 'C',
+                            'credit_value_column'=> 'D',
+                            'legacy_contract_id' => 'LEG-001',
+                        ],
+                    ],
+                ]
+            )
         ),
         responses: [
-            new OA\Response(response: 200, description: 'Migração concluída', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(
+                response: 200,
+                description: 'Migração concluída',
+                content: new OA\JsonContent(
+                    ref: '#/components/schemas/SyncMigrationResponse',
+                    example: [
+                        'inserted'    => 1,
+                        'failed'      => 0,
+                        'errors'      => [],
+                        'id_mappings' => ['LAY-001' => 'ddd44444-0000-0000-0000-000000000001'],
+                    ]
+                )
+            ),
             new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),

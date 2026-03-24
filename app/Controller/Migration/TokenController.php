@@ -9,11 +9,13 @@ use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
 
 use function Hyperf\Support\env;
 
 #[Controller(prefix: '/api/v1')]
+#[HyperfServer('http')]
 class TokenController
 {
     #[Inject]

@@ -10,7 +10,12 @@
       "Bash(grep -l \"validator\\\\|validation\\\\|translation\" /Users/helterdias/Documents/conciliador-migrator/config/autoload/*.php)",
       "Bash(find /Users/helterdias/Documents/conciliador-migrator/app -name *FormRequest* -o -name *Request.php)",
       "Bash(ls /Users/helterdias/Documents/conciliador-migrator/vendor/hyperf/validation/src/Rules/*.php)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui.css)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(m.upper\\(\\), p\\) for p,v in d.get\\(''''paths'''',{}\\).items\\(\\) for m in v]\")",
+      "Bash(grep -r \"#\\\\[OA\\\\\\\\\" /Users/helterdias/Documents/conciliador-migrator/app/Controller/ --include=\"*.php \" -l)"
     ]
   }
 }

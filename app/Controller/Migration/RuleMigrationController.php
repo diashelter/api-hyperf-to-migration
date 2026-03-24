@@ -10,10 +10,12 @@ use App\Middleware\RateLimitMiddleware;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
+use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
+#[HyperfServer('http')]
 class RuleMigrationController extends AbstractMigrationController
 {
     protected function getTable(): string
@@ -70,10 +72,48 @@ class RuleMigrationController extends AbstractMigrationController
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
         requestBody: new OA\RequestBody(
             required: true,
-            content: new OA\JsonContent(ref: '#/components/schemas/MigrationBatchRequest')
+            content: new OA\JsonContent(
+                ref: '#/components/schemas/MigrationBatchRequest',
+                example: [
+                    'batch' => [
+                        [
+                            'legacy_id'          => 'RUL-001',
+                            'history'            => 'Pagamento fornecedor',
+                            'client_supplier'    => 'Fornecedor ABC',
+                            'debit_credit'       => 'D',
+                            'id_history'         => 'A',
+                            'id_debit'           => 'B',
+                            'id_credit'          => 'C',
+                            'exclusive'          => false,
+                            'sort_order'         => 1,
+                            'automatic_launch'   => true,
+                            'legacy_company_id'  => 'EMP-001',
+                            'legacy_layout_id'   => 'LAY-001',
+                            'legacy_contract_id' => 'LEG-001',
+                        ],
+                    ],
+                ]
+            )
         ),
         responses: [
-            new OA\Response(response: 200, description: 'Migração processada', content: new OA\JsonContent(ref: '#/components/schemas/AsyncMigrationResponse')),
+            new OA\Response(
+                response: 200,
+                description: 'Migração processada',
+                content: new OA\JsonContent(
+                    ref: '#/components/schemas/AsyncMigrationResponse',
+                    example: [
+                        'migration_batch_id' => '880e8400-e29b-41d4-a716-446655440003',
+                        'entity'             => 'rules',
+                        'total_received'     => 1,
+                        'status'             => 'completed',
+                        'inserted'           => 1,
+                        'failed'             => 0,
+                        'errors'             => null,
+                        'id_mappings'        => ['RUL-001' => 'lll22222-0000-0000-0000-000000000001'],
+                        'status_url'         => '/api/v1/migration/status/880e8400-e29b-41d4-a716-446655440003',
+                    ]
+                )
+            ),
             new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),

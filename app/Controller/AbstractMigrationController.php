@@ -10,9 +10,11 @@ use App\Service\ParallelInsertService;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface;
+use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use Ramsey\Uuid\Uuid;
 
+#[HyperfServer('http')]
 abstract class AbstractMigrationController
 {
     #[Inject]

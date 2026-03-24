@@ -14,6 +14,7 @@ use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface;
+use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
 
@@ -23,6 +24,7 @@ use OpenApi\Attributes as OA;
  */
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
+#[HyperfServer('http')]
 class ContractUserMigrationController
 {
     #[Inject]
@@ -48,10 +50,40 @@ class ContractUserMigrationController
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
         requestBody: new OA\RequestBody(
             required: true,
-            content: new OA\JsonContent(ref: '#/components/schemas/MigrationBatchRequest')
+            content: new OA\JsonContent(
+                ref: '#/components/schemas/MigrationBatchRequest',
+                example: [
+                    'batch' => [
+                        [
+                            'legacy_user_id'     => 'USR-001',
+                            'legacy_contract_id' => 'LEG-001',
+                            'legacy_role_id'     => 'ROLE-ADMIN',
+                            'contract_admin'     => true,
+                        ],
+                        [
+                            'legacy_user_id'     => 'USR-002',
+                            'legacy_contract_id' => 'LEG-001',
+                            'legacy_role_id'     => 'ROLE-USER',
+                            'contract_admin'     => false,
+                        ],
+                    ],
+                ]
+            )
         ),
         responses: [
-            new OA\Response(response: 200, description: 'Migração concluída', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(
+                response: 200,
+                description: 'Migração concluída',
+                content: new OA\JsonContent(
+                    ref: '#/components/schemas/SyncMigrationResponse',
+                    example: [
+                        'inserted'    => 2,
+                        'failed'      => 0,
+                        'errors'      => [],
+                        'id_mappings' => [],
+                    ]
+                )
+            ),
             new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),

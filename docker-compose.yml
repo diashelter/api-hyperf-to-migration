@@ -10,6 +10,7 @@ services:
     volumes:
       - ./:/opt/www
     ports:
+      - "9500:9500"
       - "9501:9501"
     environment:
       - APP_ENV=dev
