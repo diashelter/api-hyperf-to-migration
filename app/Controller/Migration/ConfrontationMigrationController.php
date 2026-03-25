@@ -33,6 +33,11 @@ class ConfrontationMigrationController extends AbstractMigrationController
         return 50;
     }
 
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
     protected function validationRules(): array
     {
         return [

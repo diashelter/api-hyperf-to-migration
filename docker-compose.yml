@@ -16,12 +16,13 @@ services:
       - APP_ENV=dev
       - SCAN_CACHEABLE=false
     depends_on:
-      - postgres
+      - migrator-postgres
       - redis
     networks:
       - conciliador-net
+      - app-network
 
-  postgres:
+  migrator-postgres:
     container_name: conciliador-migrator-postgres
     image: postgres:16-alpine
     ports:
@@ -54,3 +55,6 @@ networks:
   conciliador-net:
     name: conciliador-net
     driver: bridge
+  app-network:
+    name: conciliadorcontabil-dev_app-network
+    external: true

@@ -33,6 +33,11 @@ class PeopleMigrationController extends AbstractMigrationController
         return 500;
     }
 
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
     protected function validationRules(): array
     {
         return [

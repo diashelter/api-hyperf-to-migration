@@ -33,6 +33,11 @@ class PlanItemMigrationController extends AbstractMigrationController
         return 1000;
     }
 
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
     protected function validationRules(): array
     {
         return [

@@ -35,6 +35,11 @@ class ImportRecordMigrationController extends AbstractMigrationController
         return 2000;
     }
 
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
     protected function validationRules(): array
     {
         return [
@@ -237,19 +242,21 @@ DESC,
         $importSessionIds = array_values(array_unique(array_filter(array_column($batch, 'import_session_id'))));
         $importIds = array_values(array_unique(array_filter(array_column($batch, 'import_id'))));
 
+        $db = Db::connection($this->getConnection());
+
         if (! empty($importSessionIds)) {
-            Db::table('import_sessions')
+            $db->table('import_sessions')
                 ->whereIn('id', $importSessionIds)
                 ->update(['status' => 'completed', 'updated_at' => date('Y-m-d H:i:s')]);
         }
 
         if (! empty($importIds)) {
             foreach ($importIds as $importId) {
-                $count = Db::table('import_records')
+                $count = $db->table('import_records')
                     ->where('import_id', $importId)
                     ->count();
 
-                Db::table('imports')
+                $db->table('imports')
                     ->where('id', $importId)
                     ->update([
                         'status' => 'completed',

@@ -32,4 +32,24 @@ return [
             ],
         ],
     ],
+
+    'conciliador_web' => [
+        'driver' => env('DB_WEB_DRIVER', 'pgsql'),
+        'host' => env('DB_WEB_HOST', 'postgres'),
+        'database' => env('DB_WEB_DATABASE', 'conciliador'),
+        'port' => (int) env('DB_WEB_PORT', 5432),
+        'username' => env('DB_WEB_USERNAME', 'postgres'),
+        'password' => env('DB_WEB_PASSWORD', 'conciliador'),
+        'charset' => 'utf8',
+        'prefix' => '',
+        'schema' => 'public',
+        'pool' => [
+            'min_connections' => 1,
+            'max_connections' => 10,
+            'connect_timeout' => 10.0,
+            'wait_timeout' => 3.0,
+            'heartbeat' => -1,
+            'max_idle_time' => 60.0,
+        ],
+    ],
 ];

@@ -33,6 +33,11 @@ class ImportMigrationController extends AbstractMigrationController
         return 100;
     }
 
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
     protected function validationRules(): array
     {
         return [

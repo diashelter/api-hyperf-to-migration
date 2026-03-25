@@ -41,6 +41,11 @@ abstract class AbstractMigrationController
 
     abstract protected function getMaxBatchSize(): int;
 
+    protected function getConnection(): string
+    {
+        return 'default';
+    }
+
     protected function getContractId(): string
     {
         return $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
@@ -144,7 +149,7 @@ abstract class AbstractMigrationController
             }
         }
 
-        $results = $this->insertService->insertSync($this->getTable(), $batch);
+        $results = $this->insertService->insertSync($this->getTable(), $batch, $this->getConnection());
 
         if (! empty($idMappings)) {
             $this->idMappingService->storeBatch($this->getEntity(), $idMappings, $contractId);

@@ -59,18 +59,18 @@ class ParallelInsertService
         return $results;
     }
 
-    public function insertSync(string $table, array $records): array
+    public function insertSync(string $table, array $records, string $connection = 'default'): array
     {
         $records = $this->ensureUuids($records);
         $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
 
         try {
-            Db::beginTransaction();
-            Db::table($table)->insert($records);
-            Db::commit();
+            Db::connection($connection)->beginTransaction();
+            Db::connection($connection)->table($table)->insert($records);
+            Db::connection($connection)->commit();
             $results['inserted'] = count($records);
         } catch (\Throwable $e) {
-            Db::rollBack();
+            Db::connection($connection)->rollBack();
             $results['failed'] = count($records);
             $results['errors'][] = ['message' => $e->getMessage()];
         }
