@@ -93,6 +93,10 @@ class MigrationStatusController
     {
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
 
+        if (empty($contractId)) {
+            return ['error' => 'Missing X-Contract-Id header', 'code' => 422];
+        }
+
         return $this->batchService->listByContract($contractId);
     }
 

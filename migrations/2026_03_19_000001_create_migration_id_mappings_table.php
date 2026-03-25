@@ -16,15 +16,10 @@ class CreateMigrationIdMappingsTable extends Migration
             $table->string('entity', 100)->index();
             $table->string('legacy_id', 255)->index();
             $table->uuid('new_id')->index();
-            $table->uuid('contract_id')->index();
+            $table->string('contract_id', 100)->index();
             $table->timestamp('created_at')->nullable();
 
             $table->unique(['entity', 'legacy_id', 'contract_id'], 'uniq_entity_legacy_contract');
-
-            $table->foreign('contract_id')
-                ->references('id')
-                ->on('contracts')
-                ->onDelete('cascade');
         });
     }
 

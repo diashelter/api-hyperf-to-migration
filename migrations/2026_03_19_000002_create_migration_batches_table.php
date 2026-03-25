@@ -12,7 +12,7 @@ class CreateMigrationBatchesTable extends Migration
     {
         Schema::create('migration_batches', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('contract_id')->index();
+            $table->string('contract_id', 100)->index();
             $table->string('entity', 100)->index();
             $table->string('status', 50)->default('queued')->index();
             $table->integer('total_records')->default(0);
@@ -22,11 +22,6 @@ class CreateMigrationBatchesTable extends Migration
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
-
-            $table->foreign('contract_id')
-                ->references('id')
-                ->on('contracts')
-                ->onDelete('cascade');
         });
     }
 

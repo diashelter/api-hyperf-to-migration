@@ -36,26 +36,26 @@ class ApiTokenMiddleware implements MiddlewareInterface
         try {
             $secret = env('JWT_SECRET', '');
             $decoded = JWT::decode($token, new Key($secret, 'HS256'));
-
-            $contractId = $request->getHeaderLine('X-Contract-Id');
-
-            if (! empty($decoded->contract_id) && $decoded->contract_id !== $contractId) {
-                return $this->response->json([
-                    'error' => 'Forbidden',
-                    'message' => 'Token contract_id does not match X-Contract-Id header',
-                ])->withStatus(403);
-            }
-
-            $request = $request
-                ->withAttribute('user_id', $decoded->sub ?? null)
-                ->withAttribute('contract_id', $contractId ?: ($decoded->contract_id ?? null));
-
-            return $handler->handle($request);
         } catch (\Throwable $e) {
             return $this->response->json([
                 'error' => 'Unauthorized',
                 'message' => 'Invalid token: ' . $e->getMessage(),
             ])->withStatus(401);
         }
+
+        $contractId = $request->getHeaderLine('X-Contract-Id');
+
+        if (!empty($decoded->contract_id) && $decoded->contract_id !== $contractId) {
+            return $this->response->json([
+                'error' => 'Forbidden',
+                'message' => 'Token contract_id does not match X-Contract-Id header',
+            ])->withStatus(403);
+        }
+
+        $request = $request
+            ->withAttribute('user_id', $decoded->sub ?? null)
+            ->withAttribute('contract_id', $contractId ?: ($decoded->contract_id ?? null));
+
+        return $handler->handle($request);
     }
 }
