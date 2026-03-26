@@ -15,6 +15,7 @@ class MigrationBatch extends Model
     public bool $incrementing = false;
 
     protected array $fillable = [
+        'id',
         'contract_id',
         'entity',
         'status',

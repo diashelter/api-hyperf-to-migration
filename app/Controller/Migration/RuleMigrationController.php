@@ -152,10 +152,7 @@ class RuleMigrationController extends AbstractMigrationController
             unset($record['legacy_layout_id']);
         }
 
-        if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $this->idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId) ?? $record['contract_id'] ?? null;
-            unset($record['legacy_contract_id']);
-        }
+        $record = $this->resolveContractIdFK($record, $contractId);
 
         return $record;
     }

@@ -109,10 +109,7 @@ class ExportMigrationController extends AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
-        if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $this->idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId) ?? $record['contract_id'] ?? null;
-            unset($record['legacy_contract_id']);
-        }
+        $record = $this->resolveContractIdFK($record, $contractId);
 
         if (! empty($record['legacy_import_id'])) {
             $record['import_id'] = $this->idMappingService->resolve('imports', $record['legacy_import_id'], $contractId) ?? $record['import_id'] ?? null;
@@ -127,6 +124,10 @@ class ExportMigrationController extends AbstractMigrationController
         if (! empty($record['legacy_company_id'])) {
             $record['company_id'] = $this->idMappingService->resolve('companies', $record['legacy_company_id'], $contractId) ?? $record['company_id'] ?? null;
             unset($record['legacy_company_id']);
+        }
+
+        if (isset($record['config']) && is_array($record['config'])) {
+            $record['config'] = json_encode($record['config']);
         }
 
         return $record;

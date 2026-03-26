@@ -133,10 +133,7 @@ class CompanyMigrationController extends AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
-        if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $this->idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId) ?? $record['contract_id'] ?? null;
-            unset($record['legacy_contract_id']);
-        }
+        $record = $this->resolveContractIdFK($record, $contractId);
 
         if (! empty($record['legacy_plan_id'])) {
             $record['plan_id'] = $this->idMappingService->resolve('plans', $record['legacy_plan_id'], $contractId) ?? $record['plan_id'] ?? null;

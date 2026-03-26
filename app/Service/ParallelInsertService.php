@@ -16,7 +16,8 @@ class ParallelInsertService
         string $table,
         array $records,
         int $chunkSize = 0,
-        int $maxCoroutines = 0
+        int $maxCoroutines = 0,
+        string $connection = 'default'
     ): array {
         $chunkSize = $chunkSize ?: (int) env('MIGRATION_CHUNK_SIZE', 1000);
         $maxCoroutines = $maxCoroutines ?: (int) env('MIGRATION_MAX_COROUTINES', 5);
@@ -27,9 +28,9 @@ class ParallelInsertService
         $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
 
         foreach ($chunks as $index => $chunk) {
-            $parallel->add(function () use ($table, $chunk, $index) {
+            $parallel->add(function () use ($table, $chunk, $index, $connection) {
                 try {
-                    Db::table($table)->insert($chunk);
+                    Db::connection($connection)->table($table)->insert($chunk);
                     return ['success' => true, 'count' => count($chunk), 'index' => $index];
                 } catch (\Throwable $e) {
                     return [

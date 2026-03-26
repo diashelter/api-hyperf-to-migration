@@ -105,27 +105,16 @@ class ContractUserMigrationController
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
 
         $rules = [
-            'user_id'       => 'required|uuid',
-            'contract_id'   => 'required|uuid',
-            'role_id'       => 'required|uuid',
-            'contract_admin'=> 'nullable|boolean',
+            'user_id'        => 'required|uuid',
+            'contract_id'    => 'required|uuid',
+            'role_id'        => 'required|uuid',
+            'contract_admin' => 'nullable|boolean',
         ];
 
         $validationErrors = [];
         $records = [];
         foreach ($batch as $index => $record) {
-            $validator = $this->validatorFactory->make($record, $rules);
-            if ($validator->fails()) {
-                $validationErrors[] = [
-                    'index'             => $index,
-                    'legacy_id'         => $record['legacy_id'] ?? null,
-                    'validation_errors' => $validator->errors()->toArray(),
-                ];
-                continue;
-            }
-            // Sem legacy_id nesta pivot — não há id próprio para mapear
-            unset($record['legacy_id'], $record['id'], $record['created_at'], $record['updated_at']);
-
+            // 1. Resolver legacy FKs antes da validação
             if (! empty($record['legacy_user_id'])) {
                 $record['user_id'] = $this->idMappingService->resolve('users', $record['legacy_user_id'], $contractId) ?? $record['user_id'] ?? null;
                 unset($record['legacy_user_id']);
@@ -141,6 +130,20 @@ class ContractUserMigrationController
                 unset($record['legacy_role_id']);
             }
 
+            // 2. Limpar campos que não pertencem à pivot
+            unset($record['legacy_id'], $record['id'], $record['created_at'], $record['updated_at']);
+
+            // 3. Validar UUIDs resolvidos
+            $validator = $this->validatorFactory->make($record, $rules);
+            if ($validator->fails()) {
+                $validationErrors[] = [
+                    'index'             => $index,
+                    'legacy_id'         => null,
+                    'validation_errors' => $validator->errors()->toArray(),
+                ];
+                continue;
+            }
+
             $records[] = $record;
         }
 
@@ -150,12 +153,12 @@ class ContractUserMigrationController
 
         if (! empty($records)) {
             try {
-                Db::beginTransaction();
-                Db::table('contract_user')->insert($records);
-                Db::commit();
+                Db::connection('conciliador_web')->beginTransaction();
+                Db::connection('conciliador_web')->table('contract_user')->insert($records);
+                Db::connection('conciliador_web')->commit();
                 $inserted = \count($records);
             } catch (\Throwable $e) {
-                Db::rollBack();
+                Db::connection('conciliador_web')->rollBack();
                 $failed = \count($records);
                 $errors[] = ['message' => $e->getMessage()];
             }

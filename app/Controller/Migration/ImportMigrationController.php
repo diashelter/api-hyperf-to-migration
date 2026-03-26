@@ -125,10 +125,7 @@ class ImportMigrationController extends AbstractMigrationController
             unset($record['legacy_company_id']);
         }
 
-        if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $this->idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId) ?? $record['contract_id'] ?? null;
-            unset($record['legacy_contract_id']);
-        }
+        $record = $this->resolveContractIdFK($record, $contractId);
 
         if (! empty($record['legacy_company_layout_id'])) {
             $record['company_layout_id'] = $this->idMappingService->resolve('company_layout', $record['legacy_company_layout_id'], $contractId) ?? $record['company_layout_id'] ?? null;

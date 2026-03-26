@@ -201,7 +201,7 @@ abstract class AbstractMigrationController
         }
 
         if (! empty($batch)) {
-            $results = $this->insertService->insertBatch($this->getTable(), $batch);
+            $results = $this->insertService->insertBatch($this->getTable(), $batch, 0, 0, $this->getConnection());
         } else {
             $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
         }
@@ -244,6 +244,25 @@ abstract class AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
+        return $record;
+    }
+
+    /**
+     * Resolve contract_id a partir do legacy_contract_id do payload ou,
+     * como fallback, resolve o próprio $contractId (X-Contract-Id legado)
+     * via migration_id_mappings para obter o UUID real do contrato.
+     */
+    protected function resolveContractIdFK(array $record, string $contractId): array
+    {
+        if (! empty($record['legacy_contract_id'])) {
+            $record['contract_id'] = $this->idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId) ?? $record['contract_id'] ?? null;
+            unset($record['legacy_contract_id']);
+        }
+
+        if (empty($record['contract_id'])) {
+            $record['contract_id'] = $this->idMappingService->resolve('contracts', $contractId, $contractId);
+        }
+
         return $record;
     }
 }

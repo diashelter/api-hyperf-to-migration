@@ -152,10 +152,7 @@ class LayoutMigrationController extends AbstractMigrationController
         // code é gerado automaticamente pelo banco — não aceitar do payload
         unset($record['code']);
 
-        if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $this->idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId) ?? $record['contract_id'] ?? null;
-            unset($record['legacy_contract_id']);
-        }
+        $record = $this->resolveContractIdFK($record, $contractId);
 
         return $record;
     }
