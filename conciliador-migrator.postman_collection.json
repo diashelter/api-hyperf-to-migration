@@ -1,0 +1,900 @@
+{
+  "info": {
+    "_postman_id": "conciliador-migrator-v1",
+    "name": "Conciliador Migrator API",
+    "description": "API de migração de dados para o Conciliador Web. Utilize as variáveis de ambiente `base_url`, `jwt_token` e `contract_id` para configurar o ambiente.\n\n**Ordem de migração (crítica):**\n1. contracts\n2. users → contract_users\n3. rules_sharings (opcional)\n4. plans → plan_items\n5. layouts\n6. companies\n7. company_layouts (CRÍTICO antes de imports)\n8. peoples → people_vinculated\n9. imports → import_sessions → import_records (async)\n10. rules (async)\n11. confrontations → confrontation_records (async)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:9501",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "contract_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Service Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Retorna informações básicas do serviço."
+          }
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Health check para monitoramento e load balancers."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Gerar Token JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('jwt_token', json.token);",
+                  "    console.log('Token salvo:', json.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user-legado-001\",\n  \"contract_id\": \"{{contract_id}}\",\n  \"secret\": \"sua_jwt_secret_aqui\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "token"
+              ]
+            },
+            "description": "Gera um token JWT para autenticação. O script de teste salva o token automaticamente na variável `jwt_token`.\n\n**Campos:**\n- `user_id`: ID do usuário (qualquer string)\n- `contract_id`: UUID do contrato (opcional, pode ser enviado via header X-Contract-Id)\n- `secret`: Valor da variável de ambiente `JWT_SECRET` do servidor"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Status & Utilitários",
+      "item": [
+        {
+          "name": "Listar Batches de Migração",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "status"
+              ]
+            },
+            "description": "Lista todos os batches de migração assíncrona do contrato."
+          }
+        },
+        {
+          "name": "Status de Batch Específico",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/status/:batchId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "status",
+                ":batchId"
+              ],
+              "variable": [
+                {
+                  "key": "batchId",
+                  "value": "uuid-do-batch",
+                  "description": "UUID do batch assíncrono retornado no campo migration_batch_id"
+                }
+              ]
+            },
+            "description": "Retorna o status de um batch assíncrono específico."
+          }
+        },
+        {
+          "name": "Resolver IDs Legados (ID Mapping)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entity\": \"contracts\",\n  \"legacy_ids\": [\"LEG-001\", \"LEG-002\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/id-mapping",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "id-mapping"
+              ]
+            },
+            "description": "Resolve IDs legados para UUIDs novos.\n\n**Entidades disponíveis:** contracts, users, companies, layouts, plans, plan_items, rules_sharings, peoples, imports, import_sessions, import_records, confrontations"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Migration - Sync",
+      "description": "Endpoints síncronos para migração de dados de referência e baixo volume (< 10K registros). Rate limit: 60 req/min.",
+      "item": [
+        {
+          "name": "01 - Contratos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"LEG-001\",\n      \"cpf_cnpj\": \"12345678000195\",\n      \"corporate_name\": \"Empresa Exemplo Ltda\",\n      \"name\": \"Empresa Exemplo\",\n      \"email\": \"contato@empresa.com\",\n      \"phone\": \"11987654321\",\n      \"contractor_type\": \"company\",\n      \"company_count\": 5,\n      \"user_count\": 10,\n      \"street\": \"Rua das Flores\",\n      \"number\": \"123\",\n      \"neighborhood\": \"Centro\",\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"zipcode\": \"01310100\",\n      \"complement\": \"Sala 42\",\n      \"activity_branch\": \"Contabilidade\",\n      \"is_approval\": false,\n      \"legacy_database_id\": \"DB-001\",\n      \"legacy_status_contract\": \"uuid-do-status-no-lookup-cache\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/contracts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "contracts"
+              ]
+            },
+            "description": "**Fase 1** — Sem dependências de FK. Max batch: 100.\n\n**Campos obrigatórios:** cpf_cnpj (14 chars), corporate_name, name, contractor_type (individual|company), company_count\n\n**Campos opcionais:** email, phone, street, number, neighborhood, city, state, zipcode, complement, activity_branch, is_approval, legacy_database_id"
+          }
+        },
+        {
+          "name": "02 - Usuários",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"USR-001\",\n      \"name\": \"João Silva\",\n      \"email\": \"joao.silva@empresa.com\",\n      \"password\": \"senha_legado_123\",\n      \"is_admin\": false,\n      \"is_internal\": false,\n      \"status\": true\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "users"
+              ]
+            },
+            "description": "**Fase 2** — Depende de: contracts. Max batch: 200.\n\nSenha é automaticamente hasheada com bcrypt (cost 12).\n\n**Campos obrigatórios:** name, email, password (min:8)"
+          }
+        },
+        {
+          "name": "02b - Contract Users (Pivot)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_user_id\": \"USR-001\",\n      \"legacy_contract_id\": \"LEG-001\",\n      \"legacy_role_id\": \"uuid-do-role-no-lookup-cache\",\n      \"contract_admin\": false\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/contract-users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "contract-users"
+              ]
+            },
+            "description": "**Fase 2b** — Pivot usuário-contrato com roles. Depende de: contracts, users. Max batch: 500.\n\n**Campos obrigatórios:** legacy_user_id, legacy_contract_id, legacy_role_id (UUID resolvido via lookup_cache — tabela `roles` do conciliador_web)\n\n**Atenção:** Esta tabela pivot não possui `id` próprio nem timestamps. Não enviar campo `legacy_id`.\n\n**contract_admin:** true apenas para o owner/admin principal do contrato."
+          }
+        },
+        {
+          "name": "03 - Rules Sharings (opcional)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"RS-001\",\n      \"code\": 1,\n      \"name\": \"Regras Compartilhadas Grupo A\",\n      \"legacy_contract_id\": \"LEG-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/rules-sharings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "rules-sharings"
+              ]
+            },
+            "description": "**Fase 3** — Opcional. Depende de: contracts. Max batch: 50.\n\n**Campos obrigatórios:** code (integer único por contrato), name (max 30 chars)\n\n**Uso:** Compartilhamento de regras de contabilização entre empresas do mesmo contrato."
+          }
+        },
+        {
+          "name": "04 - Planos (Chart of Accounts)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"PLN-001\",\n      \"name\": \"Plano de Contas Padrão\",\n      \"account_default\": \"11001\",\n      \"code\": \"001\",\n      \"legacy_contract_id\": \"LEG-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "plans"
+              ]
+            },
+            "description": "**Fase 4** — Depende de: contracts. Max batch: 100."
+          }
+        },
+        {
+          "name": "04b - Plan Items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"PI-001\",\n      \"name\": \"Caixa e Equivalentes\",\n      \"complete_account\": \"1.1.01.001\",\n      \"reduced_account\": \"1101\",\n      \"type\": \"A\",\n      \"origin\": \"D\",\n      \"legacy_plan_id\": \"PLN-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/plan-items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "plan-items"
+              ]
+            },
+            "description": "**Fase 4b** — Depende de: plans. Max batch: 1000.\n\n**Campos:** complete_account (ex: '1.1.01.001'), reduced_account (ex: '1101'), type (categoria contábil), origin (C=crédito, D=débito, I=indiferente)\n\n**Atenção:** O campo correto é `complete_account`, não `account` nem `code`."
+          }
+        },
+        {
+          "name": "05 - Layouts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"LAY-001\",\n      \"name\": \"Layout Extrato CSV\",\n      \"format\": \"CSV\",\n      \"sector\": \"Contábil\",\n      \"movement_type\": \"Ambos\",\n      \"start_row\": 2,\n      \"date_column\": \"A\",\n      \"history_column\": \"B\",\n      \"debit_value_column\": \"C\",\n      \"credit_value_column\": \"D\",\n      \"num_doc_column\": \"E\",\n      \"client_supplier_column\": \"F\",\n      \"bank_column\": \"G\",\n      \"filial_column\": 8,\n      \"debit_credit_column\": null,\n      \"cpf_cnpj_column\": null,\n      \"additional_information_column\": null,\n      \"additional_information_2_column\": null,\n      \"additional_information_3_column\": null,\n      \"complement_column\": null,\n      \"debit_account_column\": null,\n      \"credit_account_column\": null,\n      \"third_party_participant_column\": null,\n      \"parcel_separator\": null,\n      \"consider_previous_date\": false,\n      \"consider_previous_client_supplier\": false,\n      \"consider_previous_history\": false,\n      \"consider_previous_filial\": false,\n      \"consider_previous_bank\": false,\n      \"invert_sign\": false,\n      \"import_blocked_entries\": false,\n      \"bank_statement\": false,\n      \"participant_marking_enabled\": false,\n      \"consider_dc_for_accounting_rules\": true,\n      \"consider_history_for_accounting_rules\": true,\n      \"consider_participant_doc_for_accounting_rules\": false,\n      \"consider_participant_for_accounting_rules\": false,\n      \"consider_bank_for_accounting_rules\": false,\n      \"consider_filial_for_accounting_rules\": false,\n      \"consider_additional_info_for_accounting_rules\": false,\n      \"legacy_contract_id\": \"LEG-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/layouts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "layouts"
+              ]
+            },
+            "description": "**Fase 5** — Depende de: contracts. Max batch: 50 (objeto complexo ~95 campos).\n\n**Formatos:** Excel, OFX, TXT, CSV, CNAB240, CNAB400\n\n**movement_type:** Ambos, Pagar, Receber\n\n**sector:** Contábil, Fiscal\n\nObs: O campo `code` é gerado automaticamente pelo banco e será ignorado se enviado."
+          }
+        },
+        {
+          "name": "06 - Empresas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"EMP-001\",\n      \"code\": \"EMP001\",\n      \"corporate_name\": \"Empresa Filial SP\",\n      \"cpf_cnpj\": \"12345678000195\",\n      \"tax_regime\": \"Simples Nacional\",\n      \"email\": \"filial@empresa.com\",\n      \"phone\": \"11999999999\",\n      \"city\": \"São Paulo\",\n      \"state\": \"SP\",\n      \"legacy_contract_id\": \"LEG-001\",\n      \"legacy_plan_id\": \"PLN-001\",\n      \"legacy_rules_sharing_id\": \"RS-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/companies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "companies"
+              ]
+            },
+            "description": "**Fase 6** — Depende de: contracts, plans, rules_sharings. Max batch: 100.\n\n**Campos obrigatórios:** code (string, único por contrato), cpf_cnpj (14 chars), tax_regime (Lucro Real | Lucro Presumido | Simples Nacional | Outros)\n\nObs: Campo `city` é automaticamente convertido para maiúsculas (model mutator)."
+          }
+        },
+        {
+          "name": "07 - Company Layouts (CRÍTICO)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"CL-001\",\n      \"legacy_company_id\": \"EMP-001\",\n      \"legacy_layout_imp\": \"LAY-001\",\n      \"legacy_layout_exp\": \"uuid-do-layout-admin-no-lookup-cache\",\n      \"type_accounting\": \"DC\",\n      \"credit_account\": \"1.1.01\",\n      \"debit_account\": \"4.1.01\",\n      \"account_fixed\": false\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/company-layouts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "company-layouts"
+              ]
+            },
+            "description": "**Fase 7 — CRÍTICO** — Deve existir antes de qualquer import. Depende de: companies, layouts. Max batch: 200.\n\n**legacy_layout_imp:** FK para o layout de importação (migrado via /layouts)\n**legacy_layout_exp:** FK para o layout de exportação — UUID resolvido via lookup_cache (tabela `layouts_admin` do conciliador_web). Campo opcional.\n\n**Atenção:** O campo é `legacy_layout_imp`, não `legacy_layout_id`."
+          }
+        },
+        {
+          "name": "08 - Participantes (Peoples)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"PEO-001\",\n      \"corporate_name\": \"Fornecedor ABC Ltda\",\n      \"cpf_cnpj\": \"12345678000195\",\n      \"legacy_contract_id\": \"LEG-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/peoples",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "peoples"
+              ]
+            },
+            "description": "**Fase 8** — Depende de: contracts. Max batch: 500.\n\n**Campos obrigatórios:** corporate_name (max 100 chars)\n**Campos opcionais:** cpf_cnpj (max 14 chars)\n\n**Atenção:** O campo correto é `corporate_name`, não `name`. A tabela `peoples` não possui email nem phone."
+          }
+        },
+        {
+          "name": "08b - People Vinculated",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"PV-001\",\n      \"legacy_people_id\": \"PEO-001\",\n      \"legacy_company_id\": \"EMP-001\",\n      \"vinculated_name\": \"Fornecedor ABC Ltda\",\n      \"participant\": \"FornecedorABC\",\n      \"debit_account\": \"4.1.01\",\n      \"credit_account\": \"1.1.01\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/people-vinculated",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "people-vinculated"
+              ]
+            },
+            "description": "**Fase 8b** — Vincula participantes a empresas ou rules_sharings. Depende de: peoples, companies/rules_sharings. Max batch: 500.\n\n**Restrição:** company_id e rules_sharing_id são mutuamente exclusivos (CHECK constraint no banco). Enviar apenas um dos dois: legacy_company_id OU legacy_rules_sharing_id.\n\n**Campos úteis:** vinculated_name (nome do vínculo), participant (código interno), debit_account, credit_account."
+          }
+        },
+        {
+          "name": "09 - Importações",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"IMP-001\",\n      \"name\": \"Extrato Jan/2024\",\n      \"total_files\": 1,\n      \"initial_period\": \"2024-01-01\",\n      \"final_period\": \"2024-01-31\",\n      \"previous_balance\": 1500.00,\n      \"legacy_user_id\": \"USR-001\",\n      \"legacy_company_id\": \"EMP-001\",\n      \"legacy_contract_id\": \"LEG-001\",\n      \"legacy_company_layout_id\": \"CL-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/imports",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "imports"
+              ]
+            },
+            "description": "**Fase 9** — Depende de: users, companies, contracts, layouts, company_layouts. Max batch: 100."
+          }
+        },
+        {
+          "name": "09b - Import Sessions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"IS-001\",\n      \"original_file_name\": \"extrato_jan_2024.csv\",\n      \"file_name\": \"extrato_jan_2024.csv\",\n      \"date_to_create\": \"2024-01\",\n      \"size\": 204800,\n      \"legacy_import_id\": \"IMP-001\",\n      \"legacy_layout_id\": \"LAY-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/import-sessions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "import-sessions"
+              ]
+            },
+            "description": "**Fase 9b** — Uma sessão por arquivo importado. Depende de: imports, layouts. Max batch: 200.\n\n**Campos obrigatórios:** original_file_name (nome original do arquivo), file_name (nome interno), legacy_import_id, legacy_layout_id\n\n**Atenção:** A tabela não possui o campo `total_records`."
+          }
+        },
+        {
+          "name": "11 - Confrontações",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"CONF-001\",\n      \"description\": \"Conciliação Banco XYZ Jan/2024\",\n      \"user_create_id\": \"uuid-do-usuario-criador\",\n      \"user_create\": \"Nome do Usuario Criador\",\n      \"company_name\": \"Banco XYZ\",\n      \"company_cnpj\": \"00000000000191\",\n      \"consider_date\": true,\n      \"consider_history\": true,\n      \"legacy_contract_id\": \"LEG-001\",\n      \"legacy_company_id\": \"EMP-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/confrontations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "confrontations"
+              ]
+            },
+            "description": "**Fase 11** — Configurações de conciliação bancária. Depende de: contracts, companies, users. Max batch: 50.\n\n**Campos obrigatórios:** description, user_create_id (UUID do usuário — já migrado), user_create (nome do usuário como string)\n\n**Atenção:** `user_create_id` deve ser o UUID real do usuário (resolver via /id-mapping com entity='users' antes de enviar)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Migration - Async",
+      "description": "Endpoints assíncronos para alto volume (1M+ registros) com processamento paralelo via coroutines Swoole. Rate limit: 30 req/min. A resposta inclui `migration_batch_id` para acompanhar o status.",
+      "item": [
+        {
+          "name": "09c - Import Records (MAIOR VOLUME)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"IR-0001\",\n      \"date\": \"2024-01-10\",\n      \"history\": \"Pagamento fornecedor NF 1234\",\n      \"debit_value\": 1500.00,\n      \"credit_value\": null,\n      \"num_doc\": \"NF-001234\",\n      \"client_supplier\": \"Fornecedor ABC\",\n      \"bank\": \"Banco do Brasil\",\n      \"filial\": \"001\",\n      \"cpf_cnpj\": \"11222333000181\",\n      \"debit_account\": \"41001\",\n      \"credit_account\": \"11001\",\n      \"complement\": \"Complemento opcional\",\n      \"additional_information_1\": \"Info adicional\",\n      \"additional_information_2\": null,\n      \"additional_information_3\": null,\n      \"parcel\": null,\n      \"third_party_participant\": null,\n      \"due_date\": null,\n      \"refund_values\": null,\n      \"pis_value\": null,\n      \"cofins_value\": null,\n      \"csll_value\": null,\n      \"irrf_value\": null,\n      \"legacy_import_id\": \"IMP-001\",\n      \"legacy_import_session_id\": \"IS-001\"\n    }\n  ],\n  \"finalize\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/import-records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "import-records"
+              ]
+            },
+            "description": "**Fase 9c — MAIOR VOLUME** (1M+ registros). Depende de: imports, import_sessions. Max batch: 2000. Rate limit: 30 req/min.\n\n**Transformações automáticas:**\n- `debit_value` + `credit_value` → `value` (absoluto) + `debit_credit` (D/C)\n- `additional_information_1` → `additional_information`\n- `debit_account` e `credit_account` truncados para 15 chars\n\n**UUID v7** usado para performance de índice com 1M+ registros.\n\n**`finalize: true`** — Enviar no último batch de cada import_session para atualizar status para 'completed'."
+          }
+        },
+        {
+          "name": "09c - Import Records (ÚLTIMO BATCH - com finalize)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"IR-9999\",\n      \"date\": \"2024-01-31\",\n      \"history\": \"Último lançamento do mês\",\n      \"debit_value\": 500.00,\n      \"credit_value\": null,\n      \"legacy_import_id\": \"IMP-001\",\n      \"legacy_import_session_id\": \"IS-001\"\n    }\n  ],\n  \"finalize\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/import-records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "import-records"
+              ]
+            },
+            "description": "**Último batch de uma import_session.** Usar `finalize: true` para:\n1. Atualizar `import_sessions.status = 'completed'`\n2. Atualizar `imports.status = 'completed'` + calcular `is_big_import` (> 10.000 registros)"
+          }
+        },
+        {
+          "name": "10 - Regras de Contabilização",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"RUL-001\",\n      \"debit_credit\": \"D\",\n      \"cpf_cnpj\": null,\n      \"client_supplier\": \"Fornecedor ABC\",\n      \"history\": \"Pagamento%\",\n      \"bank\": null,\n      \"filial\": null,\n      \"id_history\": \"B\",\n      \"id_debit\": \"4.1.01\",\n      \"id_credit\": \"1.1.01\",\n      \"id_history_exp\": null,\n      \"id_participant_credit\": null,\n      \"id_participant_debit\": null,\n      \"id_cc_credit\": null,\n      \"id_cc_debit\": null,\n      \"sort_order\": 1,\n      \"exclusive\": false,\n      \"reprocess\": false,\n      \"automatic_launch\": true,\n      \"legacy_company_id\": \"EMP-001\",\n      \"legacy_layout_id\": \"LAY-001\",\n      \"legacy_contract_id\": \"LEG-001\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/rules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "rules"
+              ]
+            },
+            "description": "**Fase 10** (async). Depende de: companies, layouts, contracts. Max batch: 500. Rate limit: 30 req/min.\n\n**Campos de mapeamento contábil (colunas do layout):**\n- `id_history` → coluna do histórico (ex: 'A', 'B')\n- `id_debit` → conta débito (ex: '4.1.01')\n- `id_credit` → conta crédito (ex: '1.1.01')\n- `id_participant_debit` / `id_participant_credit` → colunas do participante\n- `id_cc_debit` / `id_cc_credit` → centro de custo\n\n**Atenção:** Os campos corretos são `id_debit` e `id_credit`, não `debit_account_map`/`credit_account_map`. A tabela `rules` não possui coluna `name`."
+          }
+        },
+        {
+          "name": "12 - Confrontation Records (Conciliação)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-Contract-Id",
+                "value": "{{contract_id}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"batch\": [\n    {\n      \"legacy_id\": \"CR-001\",\n      \"legacy_confrontation_id\": \"CONF-001\",\n      \"legacy_import_record_id\": \"IR-0001\",\n      \"legacy_import_id\": \"IMP-001\",\n      \"date\": \"2024-01-10\",\n      \"layout_code\": \"CSV01\",\n      \"debit_credit\": \"D\",\n      \"value\": 1500.00,\n      \"records_origin\": \"F\",\n      \"history\": \"Pagamento fornecedor NF 1234\",\n      \"client_supplier\": \"Fornecedor ABC\",\n      \"num_doc\": \"NF-001234\",\n      \"conciliated_value\": 1500.00\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/confrontation-records",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "confrontation-records"
+              ]
+            },
+            "description": "**Fase 12** (async). Dados de conciliação bancária. Depende de: confrontations, import_records. Max batch: 1000. Rate limit: 30 req/min.\n\n**Campos obrigatórios:** date, layout_code (max 5 chars), debit_credit (D|C), value (numérico positivo)\n\n**Atenção:** O campo correto é `value`, não `amount`. `layout_code` e `debit_credit` são obrigatórios.\n\n**records_origin:** F=financeiro, B=banco."
+          }
+        }
+      ]
+    }
+  ]
+}

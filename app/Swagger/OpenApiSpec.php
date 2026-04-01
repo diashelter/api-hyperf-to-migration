@@ -29,7 +29,6 @@ API de migração de dados do sistema legado para o Conciliador Web.
 9. `imports` → `import_sessions` → `import_records` (async) — imports depende de companies, company_layout, contracts; usar `finalize: true` no último batch de import_records
 10. `rules` (async) — depende de companies, layouts, contracts
 11. `confrontations` → `confrontation_records` (async) — confrontations depende de contracts, companies
-12. `exports` — depende de contracts, imports, users, companies
 
 ## Resolução de FK Legados
 Envie campos `legacy_*_id` no batch e a API resolve automaticamente para UUIDs via tabela `migration_id_mappings`.
@@ -85,6 +84,4 @@ DESC,
         ),
     ]
 )]
-class OpenApiSpec
-{
-}
+class OpenApiSpec {}

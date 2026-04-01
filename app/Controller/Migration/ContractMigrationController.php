@@ -7,6 +7,8 @@ namespace App\Controller\Migration;
 use App\Controller\AbstractMigrationController;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
+use App\Service\LookupCacheService;
+use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
@@ -18,6 +20,9 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class ContractMigrationController extends AbstractMigrationController
 {
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
+
     protected function getTable(): string
     {
         return 'contracts';
@@ -114,6 +119,16 @@ class ContractMigrationController extends AbstractMigrationController
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
         ]
     )]
+    protected function resolveForeignKeys(array $record, string $contractId): array
+    {
+        if (! empty($record['legacy_status_contract'])) {
+            $record['status_contract'] = $this->lookupCacheService->resolve('status', $record['legacy_status_contract']) ?? $record['status_contract'] ?? null;
+            unset($record['legacy_status_contract']);
+        }
+
+        return $record;
+    }
+
     #[PostMapping(path: 'contracts')]
     public function migrate(): array
     {

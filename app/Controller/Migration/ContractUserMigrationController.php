@@ -7,6 +7,7 @@ namespace App\Controller\Migration;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
 use App\Service\IdMappingService;
+use App\Service\LookupCacheService;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Annotation\Controller;
@@ -35,6 +36,9 @@ class ContractUserMigrationController
 
     #[Inject]
     protected IdMappingService $idMappingService;
+
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
 
     #[Inject]
     protected ValidatorFactoryInterface $validatorFactory;
@@ -126,7 +130,7 @@ class ContractUserMigrationController
             }
 
             if (! empty($record['legacy_role_id'])) {
-                $record['role_id'] = $this->idMappingService->resolve('roles', $record['legacy_role_id'], $contractId) ?? $record['role_id'] ?? null;
+                $record['role_id'] = $this->lookupCacheService->resolve('roles', $record['legacy_role_id']) ?? $record['role_id'] ?? null;
                 unset($record['legacy_role_id']);
             }
 

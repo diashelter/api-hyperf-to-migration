@@ -19,9 +19,8 @@
 11. [Fluxo 9 — Importação de Dados Transacionais](#fluxo-9--importação-de-dados-transacionais)
 12. [Fluxo 10 — Regras Contábeis](#fluxo-10--regras-contábeis)
 13. [Fluxo 11 — Conciliação](#fluxo-11--conciliação)
-14. [Fluxo 12 — Exportação](#fluxo-12--exportação)
-15. [Armadilhas e Pontos Críticos](#armadilhas-e-pontos-críticos)
-16. [Resumo dos FormRequests](#resumo-dos-formrequests)
+14. [Armadilhas e Pontos Críticos](#armadilhas-e-pontos-críticos)
+15. [Resumo dos FormRequests](#resumo-dos-formrequests)
 
 ---
 
@@ -46,34 +45,32 @@ contracts ───────────────────────�
                      └── import_records                           │
                            └── rules (aplicadas post-insert)      │
                                  └── confrontations               │
-                                       └── confrontation_records  │
-                                             └── exports ─────────┘
+                                       └── confrontation_records ─┘
 ```
 
 ---
 
 ## Ordem de Inserção
 
-| #   | Tabela                  | Depende de                                   | Obrigatório                             |
-| --- | ----------------------- | -------------------------------------------- | --------------------------------------- |
-| 1   | `contracts`             | `status` (lookup)                            | Sim — raiz do tenant                    |
-| 2   | `users`                 | —                                            | Sim — para autoria dos registros        |
-| 3   | `contract_user`         | `contracts`, `users`, `roles`                | Sim — acesso ao sistema                 |
-| 4   | `rules_sharings`        | `contracts`                                  | Não — só com compartilhamento de regras |
-| 5   | `plans`                 | `contracts`                                  | Não — só com plano de contas            |
-| 6   | `plan_items`            | `plans`                                      | Não — contas do plano                   |
-| 7   | `layouts`               | `contracts`                                  | Sim — necessário para importar          |
-| 8   | `companies`             | `contracts`, `plans`?, `rules_sharings`?     | Sim                                     |
-| 9   | `company_layout`        | `companies`, `layouts`                       | **Crítico** — sem ele não há importação |
-| 10  | `peoples`               | `contracts`                                  | Não — cadastro de participantes         |
-| 11  | `people_vinculated`     | `peoples`, `companies`/`rules_sharings`      | Não                                     |
-| 12  | `imports`               | `companies`, `company_layout`, `contracts`   | Sim                                     |
-| 13  | `import_sessions`       | `imports`, `layouts`                         | Sim — uma por arquivo/lote              |
-| 14  | `import_records`        | `imports`, `import_sessions`                 | Sim — registros transacionais           |
-| 15  | `rules`                 | `companies`, `layouts`, `contracts`          | Não — regras contábeis                  |
-| 16  | `confrontations`        | `companies`, `contracts`                     | Não — conciliação banco × financeiro    |
-| 17  | `confrontation_records` | `confrontations`, `import_records`           | Não                                     |
-| 18  | `exports`               | `imports`, `companies`, `contracts`, `users` | Não                                     |
+| #   | Tabela                  | Depende de                                 | Obrigatório                             |
+| --- | ----------------------- | ------------------------------------------ | --------------------------------------- |
+| 1   | `contracts`             | `status` (lookup)                          | Sim — raiz do tenant                    |
+| 2   | `users`                 | —                                          | Sim — para autoria dos registros        |
+| 3   | `contract_user`         | `contracts`, `users`, `roles`              | Sim — acesso ao sistema                 |
+| 4   | `rules_sharings`        | `contracts`                                | Não — só com compartilhamento de regras |
+| 5   | `plans`                 | `contracts`                                | Não — só com plano de contas            |
+| 6   | `plan_items`            | `plans`                                    | Não — contas do plano                   |
+| 7   | `layouts`               | `contracts`                                | Sim — necessário para importar          |
+| 8   | `companies`             | `contracts`, `plans`?, `rules_sharings`?   | Sim                                     |
+| 9   | `company_layout`        | `companies`, `layouts`                     | **Crítico** — sem ele não há importação |
+| 10  | `peoples`               | `contracts`                                | Não — cadastro de participantes         |
+| 11  | `people_vinculated`     | `peoples`, `companies`/`rules_sharings`    | Não                                     |
+| 12  | `imports`               | `companies`, `company_layout`, `contracts` | Sim                                     |
+| 13  | `import_sessions`       | `imports`, `layouts`                       | Sim — uma por arquivo/lote              |
+| 14  | `import_records`        | `imports`, `import_sessions`               | Sim — registros transacionais           |
+| 15  | `rules`                 | `companies`, `layouts`, `contracts`        | Não — regras contábeis                  |
+| 16  | `confrontations`        | `companies`, `contracts`                   | Não — conciliação banco × financeiro    |
+| 17  | `confrontation_records` | `confrontations`, `import_records`         | Não                                     |
 
 ---
 
@@ -1175,65 +1172,6 @@ Regras definem como lançamentos serão codificados contabilmente. Podem ser ins
 
 ---
 
-## Fluxo 12 — Exportação
-
-### FormRequest: `StoreExportRequest`
-
-```php
-'contract_id' => 'required|uuid|exists:contracts,id',
-'import_id'   => 'required|uuid|exists:imports,id',
-'user_id'     => 'required|uuid|exists:users,id',
-'company_id'  => 'required|uuid|exists:companies,id',
-'name'        => 'required|string|max:255',
-'config'      => 'required|array',  // configurações específicas de exportação
-// system-set:
-// status          = 'pending'
-// is_active       = true
-// download_count  = 0
-// file_expiry_date = null (preenchido após completed + 24h)
-```
-
-### Exemplo de Payload JSON
-
-```json
-{
-  "contract_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "import_id": "b4c5d6e7-f8a9-0123-bcde-901234567890",
-  "user_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-  "company_id": "d0e1f2a3-b4c5-6789-defa-567890123456",
-  "name": "Exportação Contábil Jan/2025 - Oliveira",
-  "config": {
-    "format": "txt",
-    "include_history": true,
-    "include_participant": false
-  }
-}
-```
-
-### Como fica no banco (`exports`)
-
-| campo             | criação                                | após processamento                    |
-| ----------------- | -------------------------------------- | ------------------------------------- |
-| id                | `e3f4a5b6-c7d8-9012-efab-012345678901` | —                                     |
-| status            | **`pending`**                          | **`completed`**                       |
-| total_records     | `null`                                 | `5`                                   |
-| processed_records | `null`                                 | `5`                                   |
-| file_name         | `null`                                 | `["export_jan2025.txt"]` (JSON array) |
-| started_at        | `null`                                 | `2025-03-23 10:30:00`                 |
-| completed_at      | `null`                                 | `2025-03-23 10:30:45`                 |
-| file_expiry_date  | `null`                                 | `2025-03-24 10:30:45` (+24h)          |
-| download_count    | `0`                                    | `0`                                   |
-| is_active         | `true`                                 | `true`                                |
-
-**Ciclo de vida do status:**
-
-```
-pending ──► processing ──► completed ──► expired (após 24h)
-                      └──► failed
-```
-
----
-
 ## Armadilhas e Pontos Críticos
 
 ### ⚠️ Colunas com nomes inesperados
@@ -1299,7 +1237,6 @@ app(CleanImportRecordsForbiddenCharactersService::class)->execute($importId);
 | Tabela.campo                           | Valores válidos                                               |
 | -------------------------------------- | ------------------------------------------------------------- |
 | `imports.status`                       | `pending`, `processing`, `completed`, `failed`                |
-| `exports.status`                       | `pending`, `processing`, `completed`, `failed`, `expired`     |
 | `confrontations.status`                | `pending`, `completed`                                        |
 | `import_records.debit_credit`          | `D`, `C`                                                      |
 | `import_records.conciliation_status`   | `Y`, `F`, `N` (ou null)                                       |
@@ -1332,7 +1269,6 @@ app(CleanImportRecordsForbiddenCharactersService::class)->execute($importId);
 | 10  | `StoreRuleRequest`                | `rules`                                          |
 | 11a | `StoreConfrontationRequest`       | `confrontations`                                 |
 | 11b | `StoreConfrontationRecordRequest` | `confrontation_records`                          |
-| 12  | `StoreExportRequest`              | `exports`                                        |
 
 ---
 
@@ -1362,7 +1298,6 @@ app(CleanImportRecordsForbiddenCharactersService::class)->execute($importId);
 [ ] 15. Inserir rules (se necessário)
 [ ] 16. Inserir confrontations (se necessário)
 [ ] 17. Inserir confrontation_records (se necessário)
-[ ] 18. Inserir exports (se necessário)
 ```
 
 ---

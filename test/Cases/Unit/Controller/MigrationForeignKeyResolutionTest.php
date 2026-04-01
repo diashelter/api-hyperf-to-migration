@@ -7,7 +7,6 @@ namespace HyperfTest\Cases\Unit\Controller;
 use App\Controller\Migration\ConfrontationMigrationController;
 use App\Controller\Migration\ConfrontationRecordMigrationController;
 use App\Controller\Migration\ContractMigrationController;
-use App\Controller\Migration\ExportMigrationController;
 use App\Controller\Migration\ImportMigrationController;
 use App\Controller\Migration\ImportSessionMigrationController;
 use App\Controller\Migration\LayoutMigrationController;
@@ -31,7 +30,6 @@ use ReflectionMethod;
 #[CoversClass(ImportSessionMigrationController::class)]
 #[CoversClass(ImportMigrationController::class)]
 #[CoversClass(RuleMigrationController::class)]
-#[CoversClass(ExportMigrationController::class)]
 #[CoversClass(ConfrontationMigrationController::class)]
 #[CoversClass(ConfrontationRecordMigrationController::class)]
 final class MigrationForeignKeyResolutionTest extends UnitTestCase
@@ -65,7 +63,7 @@ final class MigrationForeignKeyResolutionTest extends UnitTestCase
         $actualRecord = $method->invoke($controller, $inputRecord, 'contract-1');
 
         $this->assertSame(array_values(array_map(
-            static fn (string $key): array => explode(':', $key, 3),
+            static fn(string $key): array => explode(':', $key, 3),
             array_keys($resolvedValues)
         )), $calls);
         $this->assertSame($expectedRecord, $actualRecord);
@@ -162,27 +160,6 @@ final class MigrationForeignKeyResolutionTest extends UnitTestCase
                     'company_id' => 'company-uuid-1',
                     'layout_id' => 'layout-uuid-1',
                     'contract_id' => 'contract-uuid-1',
-                ],
-            ],
-            'export controller resolves all dependencies' => [
-                ExportMigrationController::class,
-                [
-                    'legacy_contract_id' => 'legacy-contract-1',
-                    'legacy_import_id' => 'legacy-import-1',
-                    'legacy_user_id' => 'legacy-user-1',
-                    'legacy_company_id' => 'legacy-company-1',
-                ],
-                [
-                    'contracts:legacy-contract-1:contract-1' => 'contract-uuid-1',
-                    'imports:legacy-import-1:contract-1' => 'import-uuid-1',
-                    'users:legacy-user-1:contract-1' => 'user-uuid-1',
-                    'companies:legacy-company-1:contract-1' => 'company-uuid-1',
-                ],
-                [
-                    'contract_id' => 'contract-uuid-1',
-                    'import_id' => 'import-uuid-1',
-                    'user_id' => 'user-uuid-1',
-                    'company_id' => 'company-uuid-1',
                 ],
             ],
             'confrontation controller resolves contract and company' => [

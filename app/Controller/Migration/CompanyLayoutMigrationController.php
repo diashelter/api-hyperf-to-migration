@@ -7,6 +7,8 @@ namespace App\Controller\Migration;
 use App\Controller\AbstractMigrationController;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
+use App\Service\LookupCacheService;
+use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
@@ -18,6 +20,9 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class CompanyLayoutMigrationController extends AbstractMigrationController
 {
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
+
     protected function getTable(): string
     {
         return 'company_layout';
@@ -134,9 +139,9 @@ class CompanyLayoutMigrationController extends AbstractMigrationController
             unset($record['legacy_layout_imp']);
         }
 
-        // layout_exp = FK para layout_admins (layout de exportação — externo ao migrador)
+        // layout_exp = FK para layouts_admin (layout de exportação — externo ao migrador, resolvido via lookup_cache)
         if (! empty($record['legacy_layout_exp'])) {
-            $record['layout_exp'] = $this->idMappingService->resolve('layout_admins', $record['legacy_layout_exp'], $contractId) ?? $record['layout_exp'] ?? null;
+            $record['layout_exp'] = $this->lookupCacheService->resolve('layouts_admin', $record['legacy_layout_exp']) ?? $record['layout_exp'] ?? null;
             unset($record['legacy_layout_exp']);
         }
 
