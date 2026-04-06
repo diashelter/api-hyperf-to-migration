@@ -23,16 +23,17 @@ class Contract extends Model
         'city',
         'complement',
         'state',
-        'activity_branch',
+
         'name',
         'email',
         'contractor_type',
         'company_count',
-        'user_count',
+
         'status_contract',
         'zipcode',
         'is_approval',
         'phone',
         'legacy_database_id',
+        'created_at'
     ];
 }

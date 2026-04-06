@@ -43,7 +43,7 @@ class UserMigrationController extends AbstractMigrationController
         return [
             'name'        => 'required|string|max:255',
             'email'       => 'required|email|max:255',
-            'password'    => 'required|string|min:8',
+            'password'    => 'required|string|min:4',
             'is_admin'    => 'nullable|boolean',
             'is_internal' => 'nullable|boolean',
             'status'      => 'nullable|boolean',

@@ -94,11 +94,11 @@ class LookupCacheService
      *
      * Retorna null se não encontrado.
      */
-    public function resolve(string $entity, string|int $externalId): ?string
+    public function resolve(string $entity, string $label): ?string
     {
         $row = Db::table('lookup_cache')
             ->where('entity', $entity)
-            ->where('external_id', (string) $externalId)
+            ->where('label', (string) $label)
             ->where('environment', $this->getEnvironment())
             ->value('external_id');
 

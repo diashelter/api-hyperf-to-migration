@@ -132,11 +132,30 @@ abstract class AbstractMigrationController
         $idMappings = [];
 
         foreach ($batch as &$record) {
+            foreach (array_keys($record) as $field) {
+                if (
+                    $field === 'password' ||
+                    $field === 'contractor_type' ||
+                    $field === 'legacy_id' ||
+                    !is_string($record[$field])
+                ) {
+                    continue;
+                }
+                if ($field === 'email') {
+                    $record[$field] = strtolower($record[$field] ?? '');
+                    continue;
+                }
+                $record[$field] = strtoupper($record[$field] ?? '');
+            }
             $legacyId = $record['legacy_id'] ?? null;
             unset($record['legacy_id']);
 
             if (empty($record['id'])) {
                 $record['id'] = $this->generateId();
+            }
+
+            if (!empty($record['password'])) {
+                $record['password'] = password_hash($record['password'], PASSWORD_BCRYPT);
             }
 
             $record['created_at'] = $record['created_at'] ?? $now;

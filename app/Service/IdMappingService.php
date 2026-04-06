@@ -57,7 +57,7 @@ class IdMappingService
         }
     }
 
-    public function resolve(string $entity, string $legacyId, string $contractId): ?string
+    public function resolve(string $entity, int|string $legacyId, string $contractId): ?string
     {
         $mapping = MigrationIdMapping::query()
             ->where('entity', $entity)
