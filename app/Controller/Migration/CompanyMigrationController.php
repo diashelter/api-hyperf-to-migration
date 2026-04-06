@@ -41,7 +41,7 @@ class CompanyMigrationController extends AbstractMigrationController
     protected function validationRules(): array
     {
         return [
-            'code'           => 'required|string',
+            'code'           => 'required|int',
             'cpf_cnpj'       => 'required|string|size:14',
             'corporate_name' => 'nullable|string|max:255',
             'external_code'  => 'nullable|string|max:20',
@@ -134,17 +134,18 @@ class CompanyMigrationController extends AbstractMigrationController
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         $record = $this->resolveContractIdFK($record, $contractId);
+        $record['plan_id'] = null;
+        $record['rules_sharing_id'] = null;
 
         if (! empty($record['legacy_plan_id'])) {
             $record['plan_id'] = $this->idMappingService->resolve('plans', $record['legacy_plan_id'], $contractId) ?? $record['plan_id'] ?? null;
-            unset($record['legacy_plan_id']);
         }
+        unset($record['legacy_plan_id']);
 
         if (! empty($record['legacy_rules_sharing_id'])) {
             $record['rules_sharing_id'] = $this->idMappingService->resolve('rules_sharings', $record['legacy_rules_sharing_id'], $contractId) ?? $record['rules_sharing_id'] ?? null;
-            unset($record['legacy_rules_sharing_id']);
-        }
-
+        }    
+        unset($record['legacy_rules_sharing_id']);
         // Mutator do Model Company: city é convertido para UPPERCASE
         // (não aplicado automaticamente em DB::table()->insert())
         if (isset($record['city']) && $record['city'] !== null) {

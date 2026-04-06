@@ -43,7 +43,7 @@ class PlanMigrationController extends AbstractMigrationController
         return [
             'name'            => 'required|string|max:70',
             'account_default' => 'nullable|string|max:50',
-            'code'            => 'nullable|string',
+            'code'            => 'nullable|int',
         ];
     }
 

@@ -120,4 +120,46 @@ WHERE pk <> 0
 </code>
 
 
+### Plano de contas
+<code>{{base_url}}/api/v1/migration/plans</code>
+
+#### query
+<code>
+SELECT 
+	pk AS legacy_id,
+	pk AS code,
+	nome AS name,
+	CASE 
+		campo_retorno
+		WHEN 'Conta Completa' THEN 'COMPLETE'
+		ELSE 'REDUCED' END
+	 AS account_default
+	FROM pcontasconc
+</code>
+
+### Emprea
+
+### query
+<code>
+SELECT 
+	empresas.pk AS legacy_id,
+	razaosocial as corporate_name,
+	REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
+	email AS email,
+	telefone AS phone,
+	cidade as city,
+	uf AS "state",
+	CURRENT_DATABASE() AS legacy_contract_id,
+	CASE 
+		WHEN fk_pcontasconc = 0 THEN NULL
+		ELSE fk_pcontasconc END 
+		AS legacy_plan_id,
+	CASE 
+		WHEN fk_plano_contas = 0 THEN NULL
+		ELSE fk_plano_contas END
+		as legacy_rules_sharing_id,
+	empresas.pk AS code,
+	INITCAP(tributacao) AS tax_regime
+FROM empresas
+</code>
 

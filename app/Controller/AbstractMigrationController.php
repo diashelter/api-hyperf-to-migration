@@ -14,6 +14,8 @@ use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use Ramsey\Uuid\Uuid;
 
+use function PHPUnit\Framework\stringEndsWith;
+
 #[HyperfServer('http')]
 abstract class AbstractMigrationController
 {
@@ -136,7 +138,7 @@ abstract class AbstractMigrationController
                 if (
                     $field === 'password' ||
                     $field === 'contractor_type' ||
-                    $field === 'legacy_id' ||
+                    stringEndsWith($field, '_id') ||
                     !is_string($record[$field])
                 ) {
                     continue;
