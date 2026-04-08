@@ -110,20 +110,23 @@ class PeopleVinculatedMigrationController extends AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
+        $record['people_id'] = null;
         if (! empty($record['legacy_people_id'])) {
             $record['people_id'] = $this->idMappingService->resolve('peoples', $record['legacy_people_id'], $contractId) ?? $record['people_id'] ?? null;
-            unset($record['legacy_people_id']);
         }
+        unset($record['legacy_people_id']);
 
+        $record['company_id'] = null;
         if (! empty($record['legacy_company_id'])) {
             $record['company_id'] = $this->idMappingService->resolve('companies', $record['legacy_company_id'], $contractId) ?? $record['company_id'] ?? null;
-            unset($record['legacy_company_id']);
         }
+        unset($record['legacy_company_id']);
 
+        $record['rules_sharing_id'] = null;
         if (! empty($record['legacy_rules_sharing_id'])) {
             $record['rules_sharing_id'] = $this->idMappingService->resolve('rules_sharings', $record['legacy_rules_sharing_id'], $contractId) ?? $record['rules_sharing_id'] ?? null;
-            unset($record['legacy_rules_sharing_id']);
         }
+        unset($record['legacy_rules_sharing_id']);
 
         return $record;
     }
