@@ -45,8 +45,8 @@ SELECT
     'company' as contractor_type,
     1000 as company_count,
     CASE ativo
-        WHEN 'V' THEN 'ATIVO' 
-        ELSE 'SUSPENSO' 
+        WHEN 'F' THEN 'SUSPENSO' 
+        ELSE 'ATIVO' 
     END AS legacy_status_contract,
     cep as zipcode,
     false as is_approval,
@@ -84,14 +84,6 @@ WHERE email <> 'suporte@integradorcontabil.net.br'
 ### Usuários do contrato ###
 <code>{{base_url}}/api/v1/migration/contract-users</code>
 usar tabela "usuários"
-Campos Disponíveis       | Banco Desktop
-|------------------------|-------|
-legacy_id                | 'CU-'+pk
-legacy_user_id           | pk    
-email                    | email
-legacy_contract_id       | CURRENT_DATABASE()
-status                   | inativo === false //se sim enviar true | se não enviar false
-is_admin                 | administrador
 
 #### Query
 <code>
@@ -115,7 +107,7 @@ SELECT
 	pk AS code,
 	nome AS name,
 	CURRENT_DATABASE() as legacy_contract_id
-	FROM plano_contas
+FROM plano_contas
 WHERE pk <> 0
 </code>
 
@@ -138,17 +130,27 @@ SELECT
 </code>
 
 ### Emprea
+<code>{{base_url}}/api/v1/migration/companies</code>
 
-### query
+#### query
 <code>
 SELECT 
 	empresas.pk AS legacy_id,
+	pk AS code,
+	codigoexterno AS external_code,
 	razaosocial as corporate_name,
 	REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
-	email AS email,
 	telefone AS phone,
+	endereco AS street,
+	numero AS "number",
+	complemento AS complement,
 	cidade as city,
+	cep AS zipcode,
 	uf AS "state",
+	ramoatividade AS activity_branch,
+	telefone AS phone,
+	celular AS phone_cell,
+	email AS email,
 	CURRENT_DATABASE() AS legacy_contract_id,
 	CASE 
 		WHEN fk_pcontasconc = 0 THEN NULL
@@ -158,8 +160,57 @@ SELECT
 		WHEN fk_plano_contas = 0 THEN NULL
 		ELSE fk_plano_contas END
 		as legacy_rules_sharing_id,
-	empresas.pk AS code,
-	INITCAP(tributacao) AS tax_regime
+	INITCAP(tributacao) AS tax_regime,
+	CASE utilizaparticipante WHEN 1 THEN true ELSE false END as use_participant,
+	COALESCE(hab_centrocusto, FALSE) AS use_cost_center,
+	COALESCE(auto_pessoa, FALSE) AS use_auto_register_of_people,
+	COALESCE(auto_pessoa_wizard, FALSE) AS use_auto_register_of_people_in_rules_accounting
 FROM empresas
+</code>
+
+### Layout - Emprea
+<code>{{base_url}}/api/v1/migration/company-layouts</code>
+
+#### query
+<code>
+SELECT 
+	pk as legacy_id,
+	fk_empresa as legacy_company_id,
+	fk_layoutimp as legacy_layout_imp,
+	fk_layoutexp AS legacy_layout_exp,
+	tipo_contab AS type_accounting,
+	conta_cred as credit_account,
+	conta_deb as debit_account,
+	COALESCE(conta_fixa_hab, FALSE) AS account_fixed
+FROM layout_empresa
+</code>
+
+### Pessoas
+<code>{{base_url}}/api/v1/migration/peoples</code>
+
+#### query
+<code>
+SELECT 
+	id AS legacy_id,
+	nomerazao AS corporate_name,
+	cpfcnpj AS cpf_cnpj,
+	CURRENT_DATABASE() AS legacy_contract_id
+FROM pessoas
+</code>
+
+### Pessoa Vinculos
+<code></code>
+
+#### Query
+<code>
+SELECT 
+	id AS legacy_id,
+	fk_pessoa AS legacy_people_id,
+	fk_empresa AS legacy_company_id,
+	fk_compartilhamento AS legacy_rules_sharing_id,
+	conta_deb AS debit_account,
+	conta_cred AS credit_account,
+	participante AS participant
+FROM pessoas_vinculo
 </code>
 
