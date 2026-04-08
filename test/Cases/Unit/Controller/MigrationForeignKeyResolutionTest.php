@@ -135,7 +135,7 @@ final class MigrationForeignKeyResolutionTest extends UnitTestCase
                     'users:legacy-user-1:contract-1' => 'user-uuid-1',
                     'companies:legacy-company-1:contract-1' => 'company-uuid-1',
                     'contracts:legacy-contract-1:contract-1' => 'contract-uuid-1',
-                    'layouts:legacy-layout-1:contract-1' => 'layout-uuid-1',
+                    'company_layout:legacy-layout-1:contract-1' => 'layout-uuid-1',
                 ],
                 [
                     'user_id' => 'user-uuid-1',

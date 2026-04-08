@@ -10,6 +10,7 @@ use OpenApi\Attributes as OA;
     schema: 'SyncMigrationResponse',
     properties: [
         new OA\Property(property: 'inserted', type: 'integer', example: 95),
+        new OA\Property(property: 'skipped', type: 'integer', example: 12, description: 'Registros ignorados por já possuírem mapping/idempotência.'),
         new OA\Property(property: 'failed', type: 'integer', example: 5),
         new OA\Property(
             property: 'errors',

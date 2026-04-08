@@ -101,7 +101,7 @@ final class UserMigrationControllerTest extends UnitTestCase
                     $record = $records[0];
 
                     $this->assertArrayNotHasKey('legacy_id', $record);
-                    $this->assertSame('João Silva', $record['name']);
+                    $this->assertSame('JOÃO SILVA', $record['name']);
                     $this->assertSame('joao.silva@empresa.com', $record['email']);
                     $this->assertNotSame($rawPassword, $record['password']);
                     $this->assertTrue(password_verify($rawPassword, $record['password']));

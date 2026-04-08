@@ -8,6 +8,7 @@ use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
 use App\Service\IdMappingService;
 use App\Service\LookupCacheService;
+use App\Service\MigrationAuditService;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Annotation\Controller;
@@ -18,6 +19,7 @@ use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
+use Ramsey\Uuid\Uuid;
 
 /**
  * Pivot table contract_user — sem id próprio, sem timestamps.
@@ -43,7 +45,12 @@ class ContractUserMigrationController
     #[Inject]
     protected ValidatorFactoryInterface $validatorFactory;
 
+    #[Inject]
+    protected MigrationAuditService $auditService;
+
     private const MAX_BATCH_SIZE = 500;
+
+    private const ENTITY = 'contract_users';
 
     #[OA\Post(
         path: '/api/v1/migration/contract-users',
@@ -96,6 +103,7 @@ class ContractUserMigrationController
     #[PostMapping(path: 'contract-users')]
     public function migrate(): array
     {
+        $requestId = Uuid::uuid4()->toString();
         $batch = $this->request->input('batch', []);
 
         if (empty($batch)) {
@@ -108,6 +116,15 @@ class ContractUserMigrationController
 
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
 
+        $this->auditService->open(
+            $requestId,
+            $contractId,
+            self::ENTITY,
+            $batch,
+            $this->getRequestIpAddress(),
+            $this->getRequestUserAgent()
+        );
+
         $rules = [
             'user_id'        => 'required|uuid',
             'contract_id'    => 'required|uuid',
@@ -116,6 +133,7 @@ class ContractUserMigrationController
         ];
 
         $validationErrors = [];
+        $validationRecordLogs = [];
         $records = [];
         foreach ($batch as $index => $record) {
             // 1. Resolver legacy FKs antes da validação
@@ -140,10 +158,20 @@ class ContractUserMigrationController
             // 3. Validar UUIDs resolvidos
             $validator = $this->validatorFactory->make($record, $rules);
             if ($validator->fails()) {
-                $validationErrors[] = [
+                $error = [
                     'index'             => $index,
                     'legacy_id'         => null,
                     'validation_errors' => $validator->errors()->toArray(),
+                ];
+                $validationErrors[] = $error;
+                $validationRecordLogs[] = [
+                    'legacy_id' => null,
+                    'new_id' => null,
+                    'status' => 'validation_error',
+                    'error_message' => json_encode(
+                        $error['validation_errors'],
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                    ),
                 ];
                 continue;
             }
@@ -152,27 +180,69 @@ class ContractUserMigrationController
         }
 
         $inserted = 0;
+        $skipped = 0;
         $failed = 0;
         $errors = [];
+        $recordLogs = $validationRecordLogs;
 
         if (! empty($records)) {
             try {
-                Db::connection('conciliador_web')->beginTransaction();
-                Db::connection('conciliador_web')->table('contract_user')->insert($records);
-                Db::connection('conciliador_web')->commit();
-                $inserted = \count($records);
+                $connection = Db::connection('conciliador_web');
+                $connection->beginTransaction();
+                $inserted = $connection->table('contract_user')->insertOrIgnore($records);
+                $connection->commit();
+                $skipped = max(0, \count($records) - $inserted);
+
+                foreach ($records as $index => $record) {
+                    $recordLogs[] = [
+                        'legacy_id' => null,
+                        'new_id' => null,
+                        'status' => $index < $inserted ? 'inserted' : 'skipped_duplicate',
+                        'error_message' => null,
+                    ];
+                }
             } catch (\Throwable $e) {
                 Db::connection('conciliador_web')->rollBack();
                 $failed = \count($records);
                 $errors[] = ['message' => $e->getMessage()];
+
+                foreach ($records as $record) {
+                    $recordLogs[] = [
+                        'legacy_id' => null,
+                        'new_id' => null,
+                        'status' => 'failed',
+                        'error_message' => $e->getMessage(),
+                    ];
+                }
             }
         }
 
-        return [
+        $response = [
             'inserted'    => $inserted,
+            'skipped'     => $skipped,
             'failed'      => $failed + \count($validationErrors),
             'errors'      => array_merge($validationErrors, $errors),
             'id_mappings' => [],
         ];
+
+        $this->auditService->close($requestId, $response);
+
+        if ($this->auditService->shouldLogRecords(self::ENTITY)) {
+            $this->auditService->logRecords($requestId, $contractId, self::ENTITY, $recordLogs);
+        }
+
+        return $response;
+    }
+
+    private function getRequestIpAddress(): ?string
+    {
+        $serverParams = $this->request->getServerParams();
+
+        return isset($serverParams['remote_addr']) ? (string) $serverParams['remote_addr'] : null;
+    }
+
+    private function getRequestUserAgent(): ?string
+    {
+        return $this->request->header('user-agent', '');
     }
 }

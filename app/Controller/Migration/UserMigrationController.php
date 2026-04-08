@@ -52,10 +52,6 @@ class UserMigrationController extends AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
-        if (isset($record['password'])) {
-            $record['password'] = password_hash($record['password'], PASSWORD_BCRYPT, ['cost' => 12]);
-        }
-
         return $record;
     }
 

@@ -38,7 +38,10 @@
       "Bash(curl -s -X POST http://localhost:9501/api/v1/migration/people-vinculated -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJjb250cmFjdF9pZCI6IkxFRy0wMDEiLCJpYXQiOjE3NzUwNTM2MDEsImV4cCI6MTc3NTE0MDAwMSwiYWJpbGl0aWVzIjpbIm1pZ3JhdGlvbjp3cml0ZSIsIm1pZ3JhdGlvbjpyZWFkIl19.k8x9CV94pRClemrLz5sjN8DykWvVKE1d39jIQp1l8NU' -H 'Content-Type: application/json' -H 'X-Contract-Id: LEG-001' -d '{\"batch\":[{\"legacy_id\":\"PV-001\",\"legacy_company_id\":\"EMP-001\",\"legacy_people_id\":\"PES-001\",\"vinculated_name\":\"Fornecedor ABC\",\"debit_account\":\"4.1.01\",\"credit_account\":\"1.1.01\"}]}')",
       "Bash(curl -s -X POST http://localhost:9501/api/v1/migration/plan-items -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJjb250cmFjdF9pZCI6IkxFRy0wMDEiLCJpYXQiOjE3NzUwNTM2MDEsImV4cCI6MTc3NTE0MDAwMSwiYWJpbGl0aWVzIjpbIm1pZ3JhdGlvbjp3cml0ZSIsIm1pZ3JhdGlvbjpyZWFkIl19.k8x9CV94pRClemrLz5sjN8DykWvVKE1d39jIQp1l8NU' -H 'Content-Type: application/json' -H 'X-Contract-Id: LEG-001' -d '{\"batch\":[{\"legacy_id\":\"PI-001\",\"legacy_plan_id\":\"PLAN-002\",\"code\":\"1\",\"name\":\"Ativo\",\"type\":\"A\"}]}')",
       "Bash(curl -s -X POST http://localhost:9501/api/v1/migration/plan-items -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJjb250cmFjdF9pZCI6IkxFRy0wMDEiLCJpYXQiOjE3NzUwNTM2MDEsImV4cCI6MTc3NTE0MDAwMSwiYWJpbGl0aWVzIjpbIm1pZ3JhdGlvbjp3cml0ZSIsIm1pZ3JhdGlvbjpyZWFkIl19.k8x9CV94pRClemrLz5sjN8DykWvVKE1d39jIQp1l8NU' -H 'Content-Type: application/json' -H 'X-Contract-Id: LEG-001' -d '{\"batch\":[{\"legacy_id\":\"PI-001\",\"legacy_plan_id\":\"PLAN-002\",\"complete_account\":\"1\",\"name\":\"Ativo\",\"type\":\"A\"}]}')",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(chmod +x:*)",
+      "Bash(bash:*)",
+      "Bash(docker restart:*)"
     ]
   }
 }

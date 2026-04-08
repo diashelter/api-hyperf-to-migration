@@ -20,11 +20,13 @@ final class ParallelInsertServiceTest extends UnitTestCase
     public function testInsertSyncWrapsInsertInTransactionAndGeneratesMissingUuids(): void
     {
         $db = Mockery::mock('alias:Hyperf\DbConnection\Db');
+        $connection = Mockery::mock();
         $builder = Mockery::mock();
         $capturedRecords = [];
 
-        $db->shouldReceive('beginTransaction')->once();
-        $db->shouldReceive('table')->once()->with('companies')->andReturn($builder);
+        $db->shouldReceive('connection')->times(3)->with('default')->andReturn($connection);
+        $connection->shouldReceive('beginTransaction')->once();
+        $connection->shouldReceive('table')->once()->with('companies')->andReturn($builder);
         $builder->shouldReceive('insert')
             ->once()
             ->with(Mockery::on(function (array $records) use (&$capturedRecords): bool {
@@ -32,8 +34,8 @@ final class ParallelInsertServiceTest extends UnitTestCase
 
                 return count($records) === 2;
             }));
-        $db->shouldReceive('commit')->once();
-        $db->shouldReceive('rollBack')->never();
+        $connection->shouldReceive('commit')->once();
+        $connection->shouldReceive('rollBack')->never();
 
         $result = (new ParallelInsertService())->insertSync('companies', [
             ['name' => 'ACME'],
@@ -48,13 +50,15 @@ final class ParallelInsertServiceTest extends UnitTestCase
     public function testInsertSyncRollsBackWhenInsertFails(): void
     {
         $db = Mockery::mock('alias:Hyperf\DbConnection\Db');
+        $connection = Mockery::mock();
         $builder = Mockery::mock();
 
-        $db->shouldReceive('beginTransaction')->once();
-        $db->shouldReceive('table')->once()->with('companies')->andReturn($builder);
+        $db->shouldReceive('connection')->times(3)->with('default')->andReturn($connection);
+        $connection->shouldReceive('beginTransaction')->once();
+        $connection->shouldReceive('table')->once()->with('companies')->andReturn($builder);
         $builder->shouldReceive('insert')->once()->andThrow(new RuntimeException('insert failed'));
-        $db->shouldReceive('commit')->never();
-        $db->shouldReceive('rollBack')->once();
+        $connection->shouldReceive('commit')->never();
+        $connection->shouldReceive('rollBack')->once();
 
         $result = (new ParallelInsertService())->insertSync('companies', [
             ['name' => 'ACME'],
@@ -72,11 +76,13 @@ final class ParallelInsertServiceTest extends UnitTestCase
         $this->setEnvValue('MIGRATION_MAX_COROUTINES', '3');
 
         $db = Mockery::mock('alias:Hyperf\DbConnection\Db');
+        $connection = Mockery::mock();
         $builder = Mockery::mock();
         $chunks = [];
         $callbacks = [];
 
-        $db->shouldReceive('table')->twice()->with('companies')->andReturn($builder);
+        $db->shouldReceive('connection')->twice()->with('default')->andReturn($connection);
+        $connection->shouldReceive('table')->twice()->with('companies')->andReturn($builder);
         $builder->shouldReceive('insert')
             ->twice()
             ->with(Mockery::on(function (array $records) use (&$chunks): bool {

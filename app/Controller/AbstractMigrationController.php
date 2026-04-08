@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\IdMappingService;
+use App\Service\MigrationAuditService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
 use Hyperf\Di\Annotation\Inject;
@@ -14,7 +15,7 @@ use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use Ramsey\Uuid\Uuid;
 
-use function PHPUnit\Framework\stringEndsWith;
+use function Hyperf\Support\env;
 
 #[HyperfServer('http')]
 abstract class AbstractMigrationController
@@ -36,6 +37,9 @@ abstract class AbstractMigrationController
 
     #[Inject]
     protected ValidatorFactoryInterface $validatorFactory;
+
+    #[Inject]
+    protected ?MigrationAuditService $auditService = null;
 
     abstract protected function getTable(): string;
 
@@ -105,93 +109,97 @@ abstract class AbstractMigrationController
 
     protected function syncMigrate(): array
     {
-        $batch = $this->request->input('batch', []);
+        $requestId = Uuid::uuid4()->toString();
+        $rawBatch = $this->request->input('batch', []);
 
-        if (empty($batch)) {
+        if (empty($rawBatch)) {
             return ['error' => 'Empty batch', 'code' => 422];
         }
 
-        if (\count($batch) > $this->getMaxBatchSize()) {
+        if (\count($rawBatch) > $this->getMaxBatchSize()) {
             return [
                 'error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}",
                 'code' => 422,
             ];
         }
 
-        [$batch, $validationErrors] = $this->filterValidRecords($batch);
-
-        if (empty($batch)) {
-            return [
-                'inserted'    => 0,
-                'failed'      => \count($validationErrors),
-                'errors'      => $validationErrors,
-                'id_mappings' => [],
-            ];
-        }
-
         $contractId = $this->getContractId();
-        $now = date('Y-m-d H:i:s');
-        $idMappings = [];
+        $entity = $this->getEntity();
 
-        foreach ($batch as &$record) {
-            foreach (array_keys($record) as $field) {
-                if (
-                    $field === 'password' ||
-                    $field === 'contractor_type' ||
-                    stringEndsWith($field, '_id') ||
-                    !is_string($record[$field])
-                ) {
-                    continue;
-                }
-                if ($field === 'email') {
-                    $record[$field] = strtolower($record[$field] ?? '');
-                    continue;
-                }
-                $record[$field] = strtoupper($record[$field] ?? '');
-            }
-            $legacyId = $record['legacy_id'] ?? null;
-            unset($record['legacy_id']);
-
-            if (empty($record['id'])) {
-                $record['id'] = $this->generateId();
-            }
-
-            if (!empty($record['password'])) {
-                $record['password'] = password_hash($record['password'], PASSWORD_BCRYPT);
-            }
-
-            $record['created_at'] = $record['created_at'] ?? $now;
-            $record['updated_at'] = $record['updated_at'] ?? $now;
-
-            $record = $this->resolveForeignKeys($record, $contractId);
-
-            if ($legacyId !== null) {
-                $idMappings[$legacyId] = $record['id'];
-            }
+        if ($this->auditService !== null) {
+            $this->auditService->open(
+                $requestId,
+                $contractId,
+                $entity,
+                $rawBatch,
+                $this->getRequestIpAddress(),
+                $this->getRequestUserAgent()
+            );
         }
 
-        $results = $this->insertService->insertSync($this->getTable(), $batch, $this->getConnection());
+        [$batch, $validationErrors] = $this->filterValidRecords($rawBatch);
+        [$batch, $skipped, $existingMappings] = $this->filterDuplicates($batch, $contractId);
+        [$preparedBatch, $idMappings, $recordContexts] = $this->prepareRecordsForInsert($batch, $contractId);
 
-        if (! empty($idMappings)) {
-            $this->idMappingService->storeBatch($this->getEntity(), $idMappings, $contractId);
+        if (! empty($preparedBatch)) {
+            $results = $this->insertService->insertSync($this->getTable(), $preparedBatch, $this->getConnection());
+        } else {
+            $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
         }
 
-        $results['id_mappings'] = $idMappings;
-        $results['errors'] = array_merge($validationErrors, $results['errors']);
-        $results['failed'] += \count($validationErrors);
+        if (! empty($idMappings) && $results['inserted'] > 0) {
+            $this->idMappingService->storeBatch($entity, $idMappings, $contractId);
+        }
 
-        return $results;
+        $response = [
+            'inserted' => $results['inserted'],
+            'skipped' => count($skipped),
+            'failed' => $results['failed'] + count($validationErrors),
+            'errors' => array_merge($validationErrors, $results['errors']),
+            'id_mappings' => array_replace($existingMappings, $idMappings),
+        ];
+
+        $this->auditService?->close($requestId, $response);
+
+        if ($this->auditService?->shouldLogRecords($entity) === true) {
+            $this->auditService->logRecords(
+                $requestId,
+                $contractId,
+                $entity,
+                array_merge(
+                    $this->buildValidationRecordLogs($validationErrors),
+                    $this->buildSkippedRecordLogs($skipped),
+                    $this->buildSyncInsertRecordLogs($recordContexts, $results)
+                )
+            );
+        }
+
+        return $response;
     }
 
     protected function asyncMigrate(): array
     {
-        $batch = $this->request->input('batch', []);
+        $requestId = Uuid::uuid4()->toString();
+        $rawBatch = $this->request->input('batch', []);
         $contractId = $this->getContractId();
+        $entity = $this->getEntity();
 
-        [$batch, $validationErrors] = $this->filterValidRecords($batch);
+        if ($this->auditService !== null) {
+            $this->auditService->open(
+                $requestId,
+                $contractId,
+                $entity,
+                $rawBatch,
+                $this->getRequestIpAddress(),
+                $this->getRequestUserAgent()
+            );
+        }
+
+        [$batch, $validationErrors] = $this->filterValidRecords($rawBatch);
+        [$batch, $skipped, $existingMappings] = $this->filterDuplicates($batch, $contractId);
 
         $migrationBatch = $this->batchService->create(
-            $this->getEntity(),
+            $entity,
             \count($batch),
             $contractId
         );
@@ -200,35 +208,16 @@ abstract class AbstractMigrationController
 
         $this->batchService->markProcessing($batchId);
 
-        $now = date('Y-m-d H:i:s');
-        $idMappings = [];
+        [$preparedBatch, $idMappings, $recordContexts] = $this->prepareRecordsForInsert($batch, $contractId, false);
 
-        foreach ($batch as &$record) {
-            $legacyId = $record['legacy_id'] ?? null;
-            unset($record['legacy_id']);
-
-            if (empty($record['id'])) {
-                $record['id'] = $this->generateId();
-            }
-
-            $record['created_at'] = $record['created_at'] ?? $now;
-            $record['updated_at'] = $record['updated_at'] ?? $now;
-
-            $record = $this->resolveForeignKeys($record, $contractId);
-
-            if ($legacyId !== null) {
-                $idMappings[$legacyId] = $record['id'];
-            }
-        }
-
-        if (! empty($batch)) {
-            $results = $this->insertService->insertBatch($this->getTable(), $batch, 0, 0, $this->getConnection());
+        if (! empty($preparedBatch)) {
+            $results = $this->insertService->insertBatch($this->getTable(), $preparedBatch, 0, 0, $this->getConnection());
         } else {
             $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
         }
 
-        if (! empty($idMappings)) {
-            $this->idMappingService->storeBatch($this->getEntity(), $idMappings, $contractId, $batchId);
+        if (! empty($idMappings) && $results['inserted'] > 0) {
+            $this->idMappingService->storeBatch($entity, $idMappings, $contractId, $batchId);
         }
 
         $allErrors = array_merge($validationErrors, $results['errors']);
@@ -241,17 +230,35 @@ abstract class AbstractMigrationController
             $allErrors ?: null
         );
 
-        return [
+        $response = [
             'migration_batch_id' => $batchId,
-            'entity'             => $this->getEntity(),
-            'total_received'     => \count($batch) + \count($validationErrors),
+            'entity'             => $entity,
+            'total_received'     => \count($rawBatch),
             'status'             => $totalFailed > 0 ? 'completed_with_errors' : 'completed',
             'inserted'           => $results['inserted'],
+            'skipped'            => \count($skipped),
             'failed'             => $totalFailed,
             'errors'             => $allErrors,
-            'id_mappings'        => $idMappings,
+            'id_mappings'        => array_replace($existingMappings, $idMappings),
             'status_url'         => "/api/v1/migration/status/{$batchId}",
         ];
+
+        $this->auditService?->close($requestId, $response, $batchId);
+
+        if ($this->auditService?->shouldLogRecords($entity) === true) {
+            $this->auditService->logRecords(
+                $requestId,
+                $contractId,
+                $entity,
+                array_merge(
+                    $this->buildValidationRecordLogs($validationErrors),
+                    $this->buildSkippedRecordLogs($skipped),
+                    $this->buildAsyncInsertRecordLogs($recordContexts, $results)
+                )
+            );
+        }
+
+        return $response;
     }
 
     /**
@@ -261,6 +268,40 @@ abstract class AbstractMigrationController
     protected function generateId(): string
     {
         return Uuid::uuid4()->toString();
+    }
+
+    protected function filterDuplicates(array $batch, string $contractId): array
+    {
+        $legacyIds = array_values(array_unique(array_filter(array_map(
+            static fn (array $record): ?string => isset($record['legacy_id']) ? (string) $record['legacy_id'] : null,
+            $batch
+        ))));
+
+        if (empty($legacyIds)) {
+            return [$batch, [], []];
+        }
+
+        $existing = $this->idMappingService->resolveMany($this->getEntity(), $legacyIds, $contractId);
+        $toInsert = [];
+        $skipped = [];
+        $existingMappings = [];
+
+        foreach ($batch as $record) {
+            $legacyId = $record['legacy_id'] ?? null;
+
+            if ($legacyId !== null && isset($existing[$legacyId])) {
+                $skipped[] = [
+                    'legacy_id' => (string) $legacyId,
+                    'new_id' => $existing[$legacyId],
+                ];
+                $existingMappings[(string) $legacyId] = $existing[$legacyId];
+                continue;
+            }
+
+            $toInsert[] = $record;
+        }
+
+        return [$toInsert, $skipped, $existingMappings];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array
@@ -285,5 +326,194 @@ abstract class AbstractMigrationController
         }
 
         return $record;
+    }
+
+    /**
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, string>, 2: array<int, array<string, mixed>>}
+     */
+    protected function prepareRecordsForInsert(array $batch, string $contractId, bool $normalizeStrings = true): array
+    {
+        $now = date('Y-m-d H:i:s');
+        $preparedBatch = [];
+        $idMappings = [];
+        $recordContexts = [];
+
+        foreach ($batch as $record) {
+            if ($normalizeStrings) {
+                foreach (array_keys($record) as $field) {
+                    if (
+                        $field === 'password' ||
+                        $field === 'contractor_type' ||
+                        $field === 'tax_regime' ||
+                        $field === 'format' ||
+                        $field === 'movement_type' ||
+                        $field === 'sector' ||
+                        $field === 'origin' ||
+                        $field === 'debit_credit' ||
+                        $field === 'records_origin' ||
+                        str_ends_with($field, '_id') ||
+                        ! is_string($record[$field])
+                    ) {
+                        continue;
+                    }
+
+                    if ($field === 'email') {
+                        $record[$field] = strtolower($record[$field] ?? '');
+                        continue;
+                    }
+
+                    $record[$field] = mb_strtoupper((string) ($record[$field] ?? ''));
+                }
+            }
+
+            $legacyId = $record['legacy_id'] ?? null;
+            unset($record['legacy_id']);
+
+            if (empty($record['id'])) {
+                $record['id'] = $this->generateId();
+            }
+
+            if (! empty($record['password'])) {
+                $record['password'] = password_hash($record['password'], PASSWORD_BCRYPT);
+            }
+
+            $record['created_at'] = $record['created_at'] ?? $now;
+            $record['updated_at'] = $record['updated_at'] ?? $now;
+
+            $record = $this->resolveForeignKeys($record, $contractId);
+
+            if ($legacyId !== null) {
+                $idMappings[(string) $legacyId] = $record['id'];
+            }
+
+            $preparedBatch[] = $record;
+            $recordContexts[] = [
+                'legacy_id' => $legacyId !== null ? (string) $legacyId : null,
+                'new_id' => $record['id'] ?? null,
+            ];
+        }
+
+        return [$preparedBatch, $idMappings, $recordContexts];
+    }
+
+    protected function getRequestIpAddress(): ?string
+    {
+        $serverParams = $this->request->getServerParams();
+
+        return isset($serverParams['remote_addr']) ? (string) $serverParams['remote_addr'] : null;
+    }
+
+    protected function getRequestUserAgent(): ?string
+    {
+        return $this->request->header('user-agent', '');
+    }
+
+    protected function buildValidationRecordLogs(array $validationErrors): array
+    {
+        return array_map(static function (array $validationError): array {
+            return [
+                'legacy_id' => $validationError['legacy_id'] ?? null,
+                'new_id' => null,
+                'status' => 'validation_error',
+                'error_message' => json_encode(
+                    $validationError['validation_errors'] ?? [],
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                ),
+            ];
+        }, $validationErrors);
+    }
+
+    protected function buildSkippedRecordLogs(array $skipped): array
+    {
+        return array_map(static function (array $record): array {
+            return [
+                'legacy_id' => $record['legacy_id'] ?? null,
+                'new_id' => $record['new_id'] ?? null,
+                'status' => 'skipped_duplicate',
+                'error_message' => null,
+            ];
+        }, $skipped);
+    }
+
+    protected function buildSyncInsertRecordLogs(array $recordContexts, array $results): array
+    {
+        if (empty($recordContexts)) {
+            return [];
+        }
+
+        $status = ((int) ($results['failed'] ?? 0)) > 0 ? 'failed' : 'inserted';
+        $errorMessage = $status === 'failed'
+            ? $this->extractErrorMessage($results['errors'][0] ?? null)
+            : null;
+
+        return array_map(static function (array $recordContext) use ($status, $errorMessage): array {
+            return [
+                'legacy_id' => $recordContext['legacy_id'] ?? null,
+                'new_id' => $status === 'inserted' ? ($recordContext['new_id'] ?? null) : null,
+                'status' => $status,
+                'error_message' => $errorMessage,
+            ];
+        }, $recordContexts);
+    }
+
+    protected function buildAsyncInsertRecordLogs(array $recordContexts, array $results): array
+    {
+        if (empty($recordContexts)) {
+            return [];
+        }
+
+        $chunkSize = (int) env('MIGRATION_CHUNK_SIZE', 1000);
+        if ($chunkSize <= 0) {
+            $chunkSize = 1000;
+        }
+
+        $failedChunks = [];
+        foreach ($results['errors'] ?? [] as $error) {
+            if (! is_array($error) || ! array_key_exists('chunk_index', $error)) {
+                continue;
+            }
+
+            $failedChunks[(int) $error['chunk_index']] = $this->extractErrorMessage($error);
+        }
+
+        if (empty($failedChunks)) {
+            return array_map(static function (array $recordContext): array {
+                return [
+                    'legacy_id' => $recordContext['legacy_id'] ?? null,
+                    'new_id' => $recordContext['new_id'] ?? null,
+                    'status' => 'inserted',
+                    'error_message' => null,
+                ];
+            }, $recordContexts);
+        }
+
+        $recordLogs = [];
+        foreach (array_chunk($recordContexts, $chunkSize) as $chunkIndex => $chunk) {
+            $chunkFailed = array_key_exists($chunkIndex, $failedChunks);
+
+            foreach ($chunk as $recordContext) {
+                $recordLogs[] = [
+                    'legacy_id' => $recordContext['legacy_id'] ?? null,
+                    'new_id' => $chunkFailed ? null : ($recordContext['new_id'] ?? null),
+                    'status' => $chunkFailed ? 'failed' : 'inserted',
+                    'error_message' => $chunkFailed ? $failedChunks[$chunkIndex] : null,
+                ];
+            }
+        }
+
+        return $recordLogs;
+    }
+
+    protected function extractErrorMessage(mixed $error): ?string
+    {
+        if (is_array($error) && isset($error['message']) && is_string($error['message'])) {
+            return $error['message'];
+        }
+
+        if (is_array($error) && isset($error['error']) && is_string($error['error'])) {
+            return $error['error'];
+        }
+
+        return null;
     }
 }

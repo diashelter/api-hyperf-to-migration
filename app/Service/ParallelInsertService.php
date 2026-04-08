@@ -22,7 +22,7 @@ class ParallelInsertService
         $chunkSize = $chunkSize ?: (int) env('MIGRATION_CHUNK_SIZE', 1000);
         $maxCoroutines = $maxCoroutines ?: (int) env('MIGRATION_MAX_COROUTINES', 5);
 
-        $records = $this->ensureUuids($records);
+        $records = $this->ensureUuids($this->normalizeRecords($records));
         $chunks = array_chunk($records, $chunkSize);
         $parallel = new Parallel($maxCoroutines);
         $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
@@ -62,7 +62,7 @@ class ParallelInsertService
 
     public function insertSync(string $table, array $records, string $connection = 'default'): array
     {
-        $records = $this->ensureUuids($records);
+        $records = $this->ensureUuids($this->normalizeRecords($records));
         $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
 
         try {
@@ -137,5 +137,28 @@ class ParallelInsertService
         }
 
         return $records;
+    }
+
+    /**
+     * Garante que todos os registros do batch têm exatamente as mesmas chaves.
+     * Campos ausentes são preenchidos com null para evitar o erro do PostgreSQL
+     * "VALUES lists must all be the same length" em INSERTs com múltiplas linhas.
+     */
+    private function normalizeRecords(array $records): array
+    {
+        if (count($records) <= 1) {
+            return $records;
+        }
+
+        $allKeys = array_unique(array_merge(...array_map('array_keys', $records)));
+
+        return array_map(static function (array $record) use ($allKeys): array {
+            foreach ($allKeys as $key) {
+                if (! array_key_exists($key, $record)) {
+                    $record[$key] = null;
+                }
+            }
+            return $record;
+        }, $records);
     }
 }

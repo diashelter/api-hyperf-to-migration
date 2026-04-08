@@ -8,7 +8,9 @@ use App\Controller\Migration\CompanyMigrationController;
 use App\Service\IdMappingService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
+use Hyperf\Contract\ValidatorInterface;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -143,11 +145,20 @@ final class CompanyMigrationControllerTest extends UnitTestCase
                 'contract-1'
             );
 
+        $validator = $this->createMock(ValidatorInterface::class);
+        $validator->method('fails')->willReturn(false);
+
+        $validatorFactory = $this->createMock(ValidatorFactoryInterface::class);
+        $validatorFactory->expects($this->once())
+            ->method('make')
+            ->willReturn($validator);
+
         $controller = $this->createController(
             $request,
             $insertService,
             $idMappingService,
-            $this->createStub(MigrationBatchService::class)
+            $this->createStub(MigrationBatchService::class),
+            $validatorFactory
         );
 
         $result = $controller->migrate();
@@ -163,13 +174,15 @@ final class CompanyMigrationControllerTest extends UnitTestCase
         RequestInterface $request,
         ParallelInsertService $insertService,
         IdMappingService $idMappingService,
-        MigrationBatchService $batchService
+        MigrationBatchService $batchService,
+        ?ValidatorFactoryInterface $validatorFactory = null
     ): CompanyMigrationController {
         $controller = new CompanyMigrationController();
         $this->injectProperty($controller, 'request', $request);
         $this->injectProperty($controller, 'insertService', $insertService);
         $this->injectProperty($controller, 'idMappingService', $idMappingService);
         $this->injectProperty($controller, 'batchService', $batchService);
+        $this->injectProperty($controller, 'validatorFactory', $validatorFactory ?? $this->createStub(ValidatorFactoryInterface::class));
 
         return $controller;
     }

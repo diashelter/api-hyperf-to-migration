@@ -14,6 +14,7 @@ use OpenApi\Attributes as OA;
         new OA\Property(property: 'total_received', type: 'integer', example: 2000),
         new OA\Property(property: 'status', type: 'string', enum: ['completed', 'completed_with_errors'], example: 'completed'),
         new OA\Property(property: 'inserted', type: 'integer', example: 1995),
+        new OA\Property(property: 'skipped', type: 'integer', example: 20, description: 'Registros ignorados por já possuírem mapping/idempotência.'),
         new OA\Property(property: 'failed', type: 'integer', example: 5),
         new OA\Property(
             property: 'errors',

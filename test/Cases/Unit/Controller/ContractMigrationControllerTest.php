@@ -6,6 +6,7 @@ namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\ContractMigrationController;
 use App\Service\IdMappingService;
+use App\Service\MigrationAuditService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
 use Hyperf\Contract\ValidatorInterface;
@@ -74,14 +75,19 @@ final class ContractMigrationControllerTest extends UnitTestCase
             ->method('input')
             ->with('batch', [])
             ->willReturn($batch);
-        $request->expects($this->once())
+        $request->expects($this->exactly(2))
             ->method('header')
-            ->with('X-Contract-Id', '')
-            ->willReturn('header-contract');
+            ->willReturnMap([
+                ['X-Contract-Id', '', 'header-contract'],
+                ['user-agent', '', 'phpunit-agent'],
+            ]);
         $request->expects($this->once())
             ->method('getAttribute')
             ->with('contract_id', 'header-contract')
             ->willReturn('contract-uuid-1');
+        $request->expects($this->once())
+            ->method('getServerParams')
+            ->willReturn(['remote_addr' => '127.0.0.1']);
 
         $validator = $this->createMock(ValidatorInterface::class);
         $validator->method('fails')->willReturn(false);
@@ -102,7 +108,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
 
                     $this->assertArrayNotHasKey('legacy_id', $record);
                     $this->assertSame('12345678000195', $record['cpf_cnpj']);
-                    $this->assertSame('Empresa Teste Ltda', $record['corporate_name']);
+                    $this->assertSame('EMPRESA TESTE LTDA', $record['corporate_name']);
                     $this->assertSame('company', $record['contractor_type']);
                     $this->assertMatchesRegularExpression(self::UUID_PATTERN, $record['id']);
                     $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $record['created_at']);
@@ -185,12 +191,183 @@ final class ContractMigrationControllerTest extends UnitTestCase
         $this->assertArrayHasKey('cpf_cnpj', $result['errors'][0]['validation_errors']);
     }
 
+    public function testMigrateSkipsExistingMappingsAndAuditsSyncRequest(): void
+    {
+        $rawBatch = [
+            [
+                'legacy_id' => 'LEG-EXIST',
+                'cpf_cnpj' => '12345678000195',
+                'corporate_name' => 'Empresa Existente',
+                'name' => 'Empresa Existente',
+                'email' => 'existente@teste.com',
+                'contractor_type' => 'company',
+                'company_count' => 1,
+            ],
+            [
+                'legacy_id' => 'LEG-NEW',
+                'cpf_cnpj' => '98765432000195',
+                'corporate_name' => 'Empresa Nova',
+                'name' => 'Empresa Nova',
+                'email' => 'nova@teste.com',
+                'contractor_type' => 'company',
+                'company_count' => 2,
+            ],
+        ];
+
+        $request = $this->createMock(RequestInterface::class);
+        $request->expects($this->exactly(2))
+            ->method('input')
+            ->with('batch', [])
+            ->willReturn($rawBatch);
+        $request->expects($this->exactly(2))
+            ->method('header')
+            ->willReturnMap([
+                ['X-Contract-Id', '', 'header-contract'],
+                ['user-agent', '', 'phpunit-agent'],
+            ]);
+        $request->expects($this->once())
+            ->method('getAttribute')
+            ->with('contract_id', 'header-contract')
+            ->willReturn('contract-uuid-1');
+        $request->expects($this->once())
+            ->method('getServerParams')
+            ->willReturn(['remote_addr' => '127.0.0.1']);
+
+        $validator = $this->createMock(ValidatorInterface::class);
+        $validator->method('fails')->willReturn(false);
+
+        $validatorFactory = $this->createMock(ValidatorFactoryInterface::class);
+        $validatorFactory->expects($this->exactly(2))
+            ->method('make')
+            ->willReturn($validator);
+
+        $persistedRecords = [];
+        $generatedId = null;
+
+        $insertService = $this->createMock(ParallelInsertService::class);
+        $insertService->expects($this->once())
+            ->method('insertSync')
+            ->with(
+                'contracts',
+                $this->callback(function (array $records) use (&$persistedRecords, &$generatedId): bool {
+                    $persistedRecords = $records;
+
+                    $this->assertCount(1, $records);
+                    $this->assertArrayNotHasKey('legacy_id', $records[0]);
+                    $this->assertSame('98765432000195', $records[0]['cpf_cnpj']);
+                    $generatedId = $records[0]['id'];
+                    $this->assertMatchesRegularExpression(self::UUID_PATTERN, $generatedId);
+
+                    return true;
+                }),
+                'conciliador_web'
+            )
+            ->willReturn(['inserted' => 1, 'failed' => 0, 'errors' => []]);
+
+        $idMappingService = $this->createMock(IdMappingService::class);
+        $idMappingService->expects($this->once())
+            ->method('resolveMany')
+            ->with('contracts', ['LEG-EXIST', 'LEG-NEW'], 'contract-uuid-1')
+            ->willReturn(['LEG-EXIST' => 'existing-uuid-1']);
+        $idMappingService->expects($this->once())
+            ->method('storeBatch')
+            ->with(
+                'contracts',
+                $this->callback(function (array $mappings) use (&$generatedId): bool {
+                    return $mappings === ['LEG-NEW' => $generatedId];
+                }),
+                'contract-uuid-1'
+            );
+
+        $capturedRequestId = null;
+        $auditService = $this->createMock(MigrationAuditService::class);
+        $auditService->expects($this->once())
+            ->method('open')
+            ->with(
+                $this->callback(function (string $requestId) use (&$capturedRequestId): bool {
+                    $capturedRequestId = $requestId;
+
+                    return preg_match(self::UUID_PATTERN, $requestId) === 1;
+                }),
+                'contract-uuid-1',
+                'contracts',
+                $rawBatch,
+                '127.0.0.1',
+                'phpunit-agent'
+            );
+        $auditService->expects($this->once())
+            ->method('close')
+            ->with(
+                $this->callback(function (string $requestId) use (&$capturedRequestId): bool {
+                    return $requestId === $capturedRequestId;
+                }),
+                $this->callback(function (array $result) use (&$generatedId): bool {
+                    $this->assertSame(1, $result['inserted']);
+                    $this->assertSame(1, $result['skipped']);
+                    $this->assertSame(0, $result['failed']);
+                    $this->assertSame([], $result['errors']);
+                    $this->assertSame([
+                        'LEG-EXIST' => 'existing-uuid-1',
+                        'LEG-NEW' => $generatedId,
+                    ], $result['id_mappings']);
+
+                    return true;
+                })
+            );
+        $auditService->expects($this->once())
+            ->method('shouldLogRecords')
+            ->with('contracts')
+            ->willReturn(true);
+        $auditService->expects($this->once())
+            ->method('logRecords')
+            ->with(
+                $this->callback(function (string $requestId) use (&$capturedRequestId): bool {
+                    return $requestId === $capturedRequestId;
+                }),
+                'contract-uuid-1',
+                'contracts',
+                $this->callback(function (array $recordLogs) use (&$generatedId): bool {
+                    $this->assertCount(2, $recordLogs);
+                    $this->assertSame('skipped_duplicate', $recordLogs[0]['status']);
+                    $this->assertSame('LEG-EXIST', $recordLogs[0]['legacy_id']);
+                    $this->assertSame('existing-uuid-1', $recordLogs[0]['new_id']);
+                    $this->assertSame('inserted', $recordLogs[1]['status']);
+                    $this->assertSame('LEG-NEW', $recordLogs[1]['legacy_id']);
+                    $this->assertSame($generatedId, $recordLogs[1]['new_id']);
+
+                    return true;
+                })
+            );
+
+        $controller = $this->createController(
+            $request,
+            $insertService,
+            $idMappingService,
+            null,
+            $validatorFactory,
+            $auditService
+        );
+
+        $result = $controller->migrate();
+
+        $this->assertSame(1, $result['inserted']);
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(0, $result['failed']);
+        $this->assertSame([], $result['errors']);
+        $this->assertSame([
+            'LEG-EXIST' => 'existing-uuid-1',
+            'LEG-NEW' => $generatedId,
+        ], $result['id_mappings']);
+        $this->assertCount(1, $persistedRecords);
+    }
+
     private function createController(
         RequestInterface $request,
         ParallelInsertService $insertService,
         ?IdMappingService $idMappingService = null,
         ?MigrationBatchService $batchService = null,
-        ?ValidatorFactoryInterface $validatorFactory = null
+        ?ValidatorFactoryInterface $validatorFactory = null,
+        ?MigrationAuditService $auditService = null
     ): ContractMigrationController {
         $controller = new ContractMigrationController();
         $this->injectProperty($controller, 'request', $request);
@@ -198,6 +375,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
         $this->injectProperty($controller, 'idMappingService', $idMappingService ?? $this->createStub(IdMappingService::class));
         $this->injectProperty($controller, 'batchService', $batchService ?? $this->createStub(MigrationBatchService::class));
         $this->injectProperty($controller, 'validatorFactory', $validatorFactory ?? $this->createStub(ValidatorFactoryInterface::class));
+        $this->injectProperty($controller, 'auditService', $auditService ?? $this->createStub(MigrationAuditService::class));
 
         return $controller;
     }
