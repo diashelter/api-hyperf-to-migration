@@ -19,7 +19,7 @@ class LookupCacheService
     private const ENTITIES = [
         'roles'         => ['table' => 'roles',         'id_col' => 'id', 'label_col' => 'name'],
         'status'        => ['table' => 'status',         'id_col' => 'id', 'label_col' => 'name'],
-        'layouts_admin' => ['table' => 'layouts_admin', 'id_col' => 'id', 'label_col' => 'name'],
+        'layouts_admin' => ['table' => 'layouts_admin', 'id_col' => 'id', 'label_col' => 'code'],
     ];
 
     private function getEnvironment(): string
@@ -94,7 +94,7 @@ class LookupCacheService
      *
      * Retorna null se não encontrado.
      */
-    public function resolve(string $entity, string $label): ?string
+    public function resolve(string $entity, int|string $label): ?string
     {
         $row = Db::table('lookup_cache')
             ->where('entity', $entity)

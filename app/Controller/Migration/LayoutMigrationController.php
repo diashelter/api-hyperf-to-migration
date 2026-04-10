@@ -7,17 +7,23 @@ namespace App\Controller\Migration;
 use App\Controller\AbstractMigrationController;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
+use App\Service\LookupCacheService;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
+use Hyperf\Di\Annotation\Inject;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
 #[HyperfServer('http')]
 class LayoutMigrationController extends AbstractMigrationController
 {
+    
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
+    
     protected function getTable(): string
     {
         return 'layouts';
@@ -30,7 +36,7 @@ class LayoutMigrationController extends AbstractMigrationController
 
     protected function getMaxBatchSize(): int
     {
-        return 50;
+        return 100;
     }
 
     protected function getConnection(): string
@@ -42,27 +48,27 @@ class LayoutMigrationController extends AbstractMigrationController
     {
         return [
             'name'          => 'required|string|max:255',
-            'format'        => 'required|in:Excel,OFX,TXT,CSV,CNAB240,CNAB400',
+            'format'        => 'required|string',
             'sector'        => 'nullable|in:Contábil,Fiscal',
             'movement_type' => 'required|in:Ambos,Pagar,Receber',
             'start_row'     => 'required|integer|min:1',
-            'date_column'                    => 'required|string|max:10',
-            'history_column'                 => 'required|string|max:10',
+            'date_column'                    => 'nullable|string|max:10',
+            'history_column'                 => 'nullable|string|max:10',
             'debit_value_column'             => 'nullable|string|max:10',
             'credit_value_column'            => 'nullable|string|max:10',
             'num_doc_column'                 => 'nullable|string|max:10',
             'client_supplier_column'         => 'nullable|string|max:10',
             'bank_column'                    => 'nullable|string|max:10',
-            'filial_column'                  => 'nullable|integer',
+            'filial_column'                  => 'nullable|string|max:10',
             'debit_credit_column'            => 'nullable|string|max:10',
-            'cpf_cnpj_column'                => 'nullable|integer',
-            'additional_information_column'  => 'nullable|integer',
-            'additional_information_2_column'=> 'nullable|integer',
-            'additional_information_3_column'=> 'nullable|integer',
-            'complement_column'              => 'nullable|integer',
-            'debit_account_column'           => 'nullable|integer',
-            'credit_account_column'          => 'nullable|integer',
-            'third_party_participant_column' => 'nullable|integer',
+            'cpf_cnpj_column'                => 'nullable|string|max:10',
+            'additional_information_column'  => 'nullable|string|max:10',
+            'additional_information_2_column'=> 'nullable|string|max:10',
+            'additional_information_3_column'=> 'nullable|string|max:10',
+            'complement_column'              => 'nullable|string|max:10',
+            'debit_account_column'           => 'nullable|string|max:10',
+            'credit_account_column'          => 'nullable|string|max:10',
+            'third_party_participant_column' => 'nullable|string|max:10',
             'parcel_separator'               => 'nullable|string|max:10',
             'consider_previous_date'             => 'nullable|boolean',
             'consider_previous_client_supplier'  => 'nullable|boolean',
@@ -149,10 +155,21 @@ class LayoutMigrationController extends AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
-        // code é gerado automaticamente pelo banco — não aceitar do payload
-        unset($record['code']);
+        // // code é gerado automaticamente pelo banco — não aceitar do payload
+        // unset($record['code']);
 
         $record = $this->resolveContractIdFK($record, $contractId);
+
+        if(($record['code'] < 1000 || $record['code'] > 5000) ){
+            $record['layouts_admin_id'] = $this->lookupCacheService->resolve('layouts_admin', $record['code']);
+        }
+        if($record['reference_layout']){
+            $record['reference_layout'] = $this->idMappingService->resolve('layouts', $record['reference_layout'], $contractId);
+        }
+
+        if($record['day_to_add_when_import'] && $record['day_to_add_when_import'] > 999){
+            $record['day_to_add_when_import'] = 999;
+        }
 
         return $record;
     }
