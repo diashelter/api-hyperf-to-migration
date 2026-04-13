@@ -70,7 +70,17 @@ class ContractMigrationController extends AbstractMigrationController
     #[OA\Post(
         path: '/api/v1/migration/contracts',
         summary: 'Migrar contratos',
-        description: 'Insere contratos em lote (síncrono). Fase 1 da migração — sem dependências de FK. Max batch: 100.',
+        description: <<<'DESC'
+        Insere contratos em lote (síncrono). Fase 1a da migração — sem dependências de FK. Max batch: 100.
+
+        **Status do contrato:**
+        Envie `legacy_status_contract` com o label exato cadastrado em `conciliador_web.status` (ex: `ATIVO`, `CANCELADO`, `SUSPENSO`).
+        O valor é resolvido via lookup_cache (entidade `status`). Se omitido, `status_contract` ficará nulo.
+
+        **Pré-requisito:** `php bin/hyperf.php migration:seed-lookups status`
+
+        **Normalização automática:** todos os campos string (exceto `email`, `contractor_type`, `password` e campos `*_id`) são convertidos para maiúsculas.
+        DESC,
         tags: ['Migration - Sync'],
         security: [['bearerAuth' => []]],
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
@@ -81,20 +91,21 @@ class ContractMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'       => 'LEG-001',
-                            'cpf_cnpj'        => '12345678000195',
-                            'corporate_name'  => 'Empresa Exemplo Ltda',
-                            'name'            => 'Empresa Exemplo',
-                            'email'           => 'contato@empresa.com',
-                            'phone'           => '11987654321',
-                            'contractor_type' => 'company',
-                            'company_count'   => 5,
-                            'user_count'      => 10,
-                            'street'          => 'Rua das Flores',
-                            'number'          => '123',
-                            'city'            => 'São Paulo',
-                            'state'           => 'SP',
-                            'zipcode'         => '01310100',
+                            'legacy_id'              => 'CONTRACT-001',
+                            'cpf_cnpj'               => '12345678000195',
+                            'corporate_name'         => 'Empresa Exemplo Ltda',
+                            'name'                   => 'Empresa Exemplo',
+                            'email'                  => 'contato@empresa.com',
+                            'phone'                  => '11987654321',
+                            'contractor_type'        => 'company',
+                            'company_count'          => 5,
+                            'user_count'             => 10,
+                            'street'                 => 'Rua das Flores',
+                            'number'                 => '123',
+                            'city'                   => 'São Paulo',
+                            'state'                  => 'SP',
+                            'zipcode'                => '01310100',
+                            'legacy_status_contract' => 'ATIVO',
                         ],
                     ],
                 ]

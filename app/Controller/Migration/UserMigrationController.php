@@ -58,7 +58,17 @@ class UserMigrationController extends AbstractMigrationController
     #[OA\Post(
         path: '/api/v1/migration/users',
         summary: 'Migrar usuários',
-        description: 'Insere usuários em lote (síncrono). Fase 2 da migração — depende de contracts. Max batch: 200.',
+        description: <<<'DESC'
+        Insere usuários em lote (síncrono). Fase 1b da migração — sem dependências de FK. Max batch: 200.
+
+        **Processamento automático:**
+        - `password`: armazenado com hash bcrypt (nunca em texto plano)
+        - `email`: convertido para minúsculas
+        - Demais campos string: convertidos para maiúsculas
+        - `legacy_id`: usado para idempotência e rastreamento — não persiste na tabela `users`
+
+        **Idempotência:** registros com `legacy_id` já migrado são ignorados (skipped) sem erro.
+        DESC,
         tags: ['Migration - Sync'],
         security: [['bearerAuth' => []]],
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],

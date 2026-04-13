@@ -20,6 +20,7 @@ class LookupCacheService
         'roles'         => ['table' => 'roles',         'id_col' => 'id', 'label_col' => 'name'],
         'status'        => ['table' => 'status',         'id_col' => 'id', 'label_col' => 'name'],
         'layouts_admin' => ['table' => 'layouts_admin', 'id_col' => 'id', 'label_col' => 'code'],
+        'permissions'   => ['table' => 'permissions',   'id_col' => 'id', 'label_expr' => "module || ':' || name"],
     ];
 
     private function getEnvironment(): string
@@ -41,9 +42,13 @@ class LookupCacheService
         $env     = $this->getEnvironment();
         $now     = now()->toDateTimeString();
 
+        $selectExpr = isset($config['label_expr'])
+            ? "{$config['id_col']} as external_id, {$config['label_expr']} as label"
+            : "{$config['id_col']} as external_id, {$config['label_col']} as label";
+
         $rows = Db::connection('conciliador_web')
             ->table($config['table'])
-            ->select($config['id_col'] . ' as external_id', $config['label_col'] . ' as label')
+            ->selectRaw($selectExpr)
             ->get()
             ->toArray();
 
@@ -60,6 +65,7 @@ class LookupCacheService
                 'payload'     => null,
                 'environment' => $env,
                 'created_at'  => $now,
+                'updated_at'  => $now,
             ];
         }
 
@@ -68,7 +74,7 @@ class LookupCacheService
             Db::table('lookup_cache')->upsert(
                 $chunk,
                 ['entity', 'external_id', 'environment'],
-                ['label', 'payload']
+                ['label', 'payload', 'updated_at']
             );
         }
 

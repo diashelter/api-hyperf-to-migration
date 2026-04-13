@@ -55,7 +55,18 @@ class ContractUserMigrationController
     #[OA\Post(
         path: '/api/v1/migration/contract-users',
         summary: 'Migrar vínculos usuário × contrato',
-        description: 'Insere vínculos na tabela pivot contract_user (síncrono). Fase 2b — obrigatório para acesso dos usuários ao sistema. Tabela sem id próprio e sem timestamps. Max batch: 500. FK legados: legacy_user_id, legacy_contract_id, legacy_role_id.',
+        description: <<<'DESC'
+        Insere vínculos na tabela pivot `contract_user` (síncrono). Fase 2b — obrigatório para acesso dos usuários ao sistema. Tabela sem id próprio e sem timestamps. Max batch: 500.
+
+        **Resolução de FKs legadas:**
+        - `legacy_user_id` → resolve via `migration_id_mappings` (entidade `users`, escopo `contract_id` do token)
+        - `legacy_contract_id` → resolve via `migration_id_mappings` (entidade `contracts`)
+        - `legacy_role_id` → resolve via `lookup_cache` (entidade `roles`, busca pelo **label**): `owner` | `user` | `admin` | `support`
+
+        **Efeito colateral:** o trigger `seed_permission` no `contract_user` concede automaticamente todas as 52 permissões ao par usuário × contrato. Use o endpoint `/user-permissions` (Fase 2c) para revogar as que o usuário não deve ter.
+
+        **Pré-requisito:** `php bin/hyperf.php migration:seed-lookups roles`
+        DESC,
         tags: ['Migration - Sync'],
         security: [['bearerAuth' => []]],
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
@@ -67,14 +78,14 @@ class ContractUserMigrationController
                     'batch' => [
                         [
                             'legacy_user_id'     => 'USR-001',
-                            'legacy_contract_id' => 'LEG-001',
-                            'legacy_role_id'     => 'ROLE-ADMIN',
+                            'legacy_contract_id' => 'CONTRACT-001',
+                            'legacy_role_id'     => 'owner',
                             'contract_admin'     => true,
                         ],
                         [
                             'legacy_user_id'     => 'USR-002',
-                            'legacy_contract_id' => 'LEG-001',
-                            'legacy_role_id'     => 'ROLE-USER',
+                            'legacy_contract_id' => 'CONTRACT-001',
+                            'legacy_role_id'     => 'user',
                             'contract_admin'     => false,
                         ],
                     ],

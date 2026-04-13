@@ -74,48 +74,63 @@ class UserPermissionMigrationController
      * ATENÇÃO: preencher este mapa antes de executar a Fase 2c.
      */
     private const PERMISSION_MAP = [
-        // Exemplos (descomentar e ajustar conforme o sistema legado):
-        // 'can_view_company'       => ['company:view'],
-        // 'can_manage_company'     => ['company:create', 'company:update', 'company:delete'],
-        // 'can_view_import'        => ['import:view'],
-        // 'can_manage_import'      => ['import:create', 'import:update', 'import:delete'],
-        // 'can_view_layout'        => ['layout:view'],
-        // 'can_manage_layout'      => ['layout:create', 'layout:update', 'layout:delete'],
-        // 'can_view_user'          => ['user:view'],
-        // 'can_manage_user'        => ['user:create', 'user:update', 'user:delete'],
-        // 'can_view_rules'         => ['rules:view'],
-        // 'can_manage_rules'       => ['rules:create', 'rules:update', 'rules:delete'],
-        // 'can_view_people'        => ['people:view'],
-        // 'can_manage_people'      => ['people:create', 'people:update', 'people:delete'],
-        // 'can_view_plan'          => ['plan:view'],
-        // 'can_manage_plan'        => ['plan:create', 'plan:update', 'plan:delete'],
-        // 'can_view_confrontation' => ['confrontation:view'],
-        // 'can_manage_confrontation' => ['confrontation:create', 'confrontation:update', 'confrontation:delete'],
-        // 'can_export'             => ['export:view', 'export:create'],
-        // 'can_open_finance'       => ['open-finance:view', 'open-finance:create', 'open-finance:update', 'open-finance:delete'],
-        // 'can_data_migration'     => ['data-migration:view', 'data-migration:create', 'data-migration:update', 'data-migration:delete'],
+        // Usuários
+        'can_create_user'          => ['user:create'],
+        'can_edit_user'            => ['user:update'],
+        'can_delete_user'          => ['user:delete'],
+        // Empresas
+        'can_create_company'       => ['company:create'],
+        'can_edit_company'         => ['company:update'],
+        'can_delete_company'       => ['company:delete'],
+        // Layouts
+        'can_create_layout'        => ['layout:create'],
+        'can_edit_layout'          => ['layout:update'],
+        'can_delete_layout'        => ['layout:delete'],
+        // Regras compartilhadas (módulo 'rules' no conciliador_web)
+        'can_create_shared_rules'  => ['rules:create'],
+        'can_edit_shared_rules'    => ['rules:update'],
+        'can_delete_shared_rules'  => ['rules:delete'],
+        // Importação
+        'can_manage_import'        => ['import:create', 'import:update', 'import:delete'],
+        // Exportação
+        'can_manage_export'        => ['export:create', 'export:update', 'export:delete'],
+        // Conciliação
+        'can_manage_confrontation' => ['confrontation:create', 'confrontation:update', 'confrontation:delete'],
     ];
 
     #[OA\Post(
         path: '/api/v1/migration/user-permissions',
         summary: 'Revogar permissões de usuários (Fase 2c)',
         description: <<<'DESC'
-        Remove permissões específicas de permission_users para usuários migrados.
+        Remove permissões específicas de `permission_users` para usuários migrados. Fase 2c — executar APÓS a Fase 2b (contract-users). Max batch: 500.
 
-        Contexto: o trigger seed_permission (disparado no INSERT em contract_user, Fase 2b)
-        concede automaticamente TODAS as 52 permissões ao usuário × contrato.
-        Este endpoint revoga as permissões que eram false no sistema legado.
+        **Contexto:** o trigger `seed_permission` (disparado no INSERT em `contract_user`, Fase 2b) concede automaticamente TODAS as 52 permissões ao par usuário × contrato. Este endpoint revoga as que eram `false` no sistema legado.
 
-        Semântica dos flags:
-        - false  → revoga a permissão (DELETE)
-        - true   → mantém (trigger já concedeu)
-        - null   → mantém (sem ação)
-        - ausente → mantém (sem ação)
+        **Semântica dos flags:**
+        - `false` → revoga a permissão (DELETE em `permission_users`)
+        - `true` → mantém (trigger já concedeu, sem ação)
+        - `null` ou ausente → mantém (sem ação)
 
-        OBRIGATÓRIO: executar APÓS a Fase 2b (contract-users). Max batch: 500.
+        **Flags disponíveis e permissões revogadas:**
+        | Flag legado | Permissões revogadas |
+        |---|---|
+        | `can_create_user` | `user:create` |
+        | `can_edit_user` | `user:update` |
+        | `can_delete_user` | `user:delete` |
+        | `can_create_company` | `company:create` |
+        | `can_edit_company` | `company:update` |
+        | `can_delete_company` | `company:delete` |
+        | `can_create_layout` | `layout:create` |
+        | `can_edit_layout` | `layout:update` |
+        | `can_delete_layout` | `layout:delete` |
+        | `can_create_shared_rules` | `rules:create` |
+        | `can_edit_shared_rules` | `rules:update` |
+        | `can_delete_shared_rules` | `rules:delete` |
+        | `can_manage_import` | `import:create`, `import:update`, `import:delete` |
+        | `can_manage_export` | `export:create`, `export:update`, `export:delete` |
+        | `can_manage_confrontation` | `confrontation:create`, `confrontation:update`, `confrontation:delete` |
 
-        Pré-requisito: rodar `php bin/hyperf.php migration:seed-lookups permissions`
-        antes de usar este endpoint.
+        **Pré-requisito:** `php bin/hyperf.php migration:seed-lookups permissions`
         DESC,
         tags: ['Migration - Sync'],
         security: [['bearerAuth' => []]],
@@ -136,10 +151,13 @@ class UserPermissionMigrationController
                             ],
                             additionalProperties: new OA\AdditionalProperties(type: 'boolean'),
                             example: [
-                                'legacy_user_id' => 'USR-001',
-                                'can_view_import' => false,
-                                'can_manage_layout' => true,
-                                'can_view_rules' => false,
+                                'legacy_user_id'       => 'USR-002',
+                                'can_create_layout'    => false,
+                                'can_edit_layout'      => false,
+                                'can_delete_layout'    => false,
+                                'can_create_shared_rules' => false,
+                                'can_edit_shared_rules'   => false,
+                                'can_delete_shared_rules' => false,
                             ]
                         )
                     ),
