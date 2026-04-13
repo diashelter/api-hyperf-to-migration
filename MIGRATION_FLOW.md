@@ -33,11 +33,13 @@ contracts ───────────────────────�
    ├── rules_sharings                                              │
    ├── plans                                                       │
    │     └── plan_items                                           │
-   ├── layouts                                                     │
+   ├── layouts ◄── (Fase 4a — antes ou paralelo a companies)      │
    ├── users ──────────────────────────────────────────────────────┤
    │     └── contract_user (pivot: users + contracts + roles)     │
    └── companies ◄─────────── (plan_id?, rules_sharing_id?)       │
          ├── company_layout (pivot: companies + layouts) ──────────┤
+         │     layout_imp → layouts (migrado, IdMappingService)   │
+         │     layout_exp → layouts_admin (lookup_cache)          │
          ├── peoples                                               │
          │     └── people_vinculated                              │
          └── imports ◄──── (company_layout_id)                    │
@@ -60,7 +62,7 @@ contracts ───────────────────────�
 | 4   | `rules_sharings`        | `contracts`                                | Não — só com compartilhamento de regras |
 | 5   | `plans`                 | `contracts`                                | Não — só com plano de contas            |
 | 6   | `plan_items`            | `plans`                                    | Não — contas do plano                   |
-| 7   | `layouts`               | `contracts`                                | Sim — necessário para importar          |
+| 7   | `layouts`               | `contracts`, `layouts` (auto-ref EXP→IMP)  | Sim — Fase 4a; antes ou paralelo às companies |
 | 8   | `companies`             | `contracts`, `plans`?, `rules_sharings`?   | Sim                                     |
 | 9   | `company_layout`        | `companies`, `layouts`                     | **Crítico** — sem ele não há importação |
 | 10  | `peoples`               | `contracts`                                | Não — cadastro de participantes         |
@@ -356,6 +358,8 @@ Usar apenas quando empresas do contrato precisam **compartilhar as mesmas regras
 
 O layout define como as colunas do arquivo serão mapeadas para os campos do registro.
 
+> **Fase 4a — deve ser executado antes ou em paralelo com companies (Fase 4b).** O vínculo `company_layout` (Fase 5) depende de ambos.
+
 ### FormRequest: `StoreLayoutRequest`
 
 ```php
@@ -553,6 +557,17 @@ O layout define como as colunas do arquivo serão mapeadas para os campos do reg
 ## Fluxo 7 — Vínculo Empresa × Layout (`company_layout`)
 
 > **Tabela pivot mais crítica do sistema.** Sem este registro não é possível realizar importações.
+
+### Distinção: `layout_imp` vs `layout_exp`
+
+| Campo | FK legado | Resolução | Origem |
+|---|---|---|---|
+| `layout_imp` | `legacy_layout_imp` | `IdMappingService` (entidade `layouts`) | Layout migrado (Fluxo 5) |
+| `layout_exp` | `legacy_layout_exp` | `LookupCacheService` (entidade `layouts_admin`) | Layout admin pré-cadastrado no sistema |
+
+> **`layout_exp` ≠ `reference_layout` do layout.** São dois conceitos distintos:
+> - `reference_layout` na tabela `layouts`: link entre dois layouts migrados (IMP→EXP), resolvido por `legacy_reference_layout`.
+> - `layout_exp` na tabela `company_layout`: layout de exportação pré-existente do sistema (admin), resolvido pelo `code` via `lookup_cache`.
 
 ### FormRequest: `StoreCompanyLayoutRequest`
 
