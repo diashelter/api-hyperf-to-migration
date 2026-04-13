@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest;
 
@@ -15,6 +23,30 @@ abstract class UnitTestCase extends TestCase
 
     /** @var array<string, array{exists: bool, value: ?string}> */
     private array $environmentBackup = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->environmentBackup as $name => $backup) {
+            if (! $backup['exists']) {
+                putenv($name);
+                unset($_ENV[$name], $_SERVER[$name]);
+                continue;
+            }
+
+            $value = $backup['value'] ?? '';
+            putenv(sprintf('%s=%s', $name, $value));
+            $_ENV[$name] = $value;
+            $_SERVER[$name] = $value;
+        }
+
+        $this->environmentBackup = [];
+
+        if (class_exists(Mockery::class)) {
+            Mockery::close();
+        }
+
+        parent::tearDown();
+    }
 
     protected function setEnvValue(string $name, ?string $value): void
     {
@@ -52,29 +84,5 @@ abstract class UnitTestCase extends TestCase
 
         $reflectionProperty = $reflection->getProperty($property);
         $reflectionProperty->setValue($object, $value);
-    }
-
-    protected function tearDown(): void
-    {
-        foreach ($this->environmentBackup as $name => $backup) {
-            if (! $backup['exists']) {
-                putenv($name);
-                unset($_ENV[$name], $_SERVER[$name]);
-                continue;
-            }
-
-            $value = $backup['value'] ?? '';
-            putenv(sprintf('%s=%s', $name, $value));
-            $_ENV[$name] = $value;
-            $_SERVER[$name] = $value;
-        }
-
-        $this->environmentBackup = [];
-
-        if (class_exists(Mockery::class)) {
-            Mockery::close();
-        }
-
-        parent::tearDown();
     }
 }

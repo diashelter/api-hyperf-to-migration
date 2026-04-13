@@ -1,12 +1,21 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Service;
 
 use Hyperf\Coroutine\Parallel;
 use Hyperf\DbConnection\Db;
 use Ramsey\Uuid\Uuid;
+use Throwable;
 
 use function Hyperf\Support\env;
 
@@ -32,7 +41,7 @@ class ParallelInsertService
                 try {
                     Db::connection($connection)->table($table)->insert($chunk);
                     return ['success' => true, 'count' => count($chunk), 'index' => $index];
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     return [
                         'success' => false,
                         'count' => 0,
@@ -70,7 +79,7 @@ class ParallelInsertService
             Db::connection($connection)->table($table)->insert($records);
             Db::connection($connection)->commit();
             $results['inserted'] = count($records);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             Db::connection($connection)->rollBack();
             $results['failed'] = count($records);
             $results['errors'][] = ['message' => $e->getMessage()];
@@ -100,7 +109,7 @@ class ParallelInsertService
                 try {
                     Db::table($table)->upsert($chunk, $uniqueKeys, $updateColumns);
                     return ['success' => true, 'count' => count($chunk), 'index' => $index];
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     return [
                         'success' => false,
                         'count' => 0,

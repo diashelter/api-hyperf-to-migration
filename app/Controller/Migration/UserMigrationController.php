@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,43 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class UserMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'users';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'users';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 200;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'name'        => 'required|string|max:255',
-            'email'       => 'required|email|max:255',
-            'password'    => 'required|string|min:4',
-            'is_admin'    => 'nullable|boolean',
-            'is_internal' => 'nullable|boolean',
-            'status'      => 'nullable|boolean',
-        ];
-    }
-
-    protected function resolveForeignKeys(array $record, string $contractId): array
-    {
-        return $record;
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/users',
         summary: 'Migrar usuários',
@@ -79,13 +50,13 @@ class UserMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'   => 'USR-001',
-                            'name'        => 'João Silva',
-                            'email'       => 'joao.silva@empresa.com',
-                            'password'    => 'senha_legado_123',
-                            'is_admin'    => false,
+                            'legacy_id' => 'USR-001',
+                            'name' => 'João Silva',
+                            'email' => 'joao.silva@empresa.com',
+                            'password' => 'senha_legado_123',
+                            'is_admin' => false,
                             'is_internal' => false,
-                            'status'      => true,
+                            'status' => true,
                         ],
                     ],
                 ]
@@ -98,9 +69,9 @@ class UserMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['USR-001' => '550e8400-e29b-41d4-a716-446655440001'],
                     ]
                 )
@@ -124,5 +95,42 @@ class UserMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'users';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'users';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 200;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255',
+            'password' => 'required|string|min:4',
+            'is_admin' => 'nullable|boolean',
+            'is_internal' => 'nullable|boolean',
+            'status' => 'nullable|boolean',
+        ];
+    }
+
+    protected function resolveForeignKeys(array $record, string $contractId): array
+    {
+        return $record;
     }
 }

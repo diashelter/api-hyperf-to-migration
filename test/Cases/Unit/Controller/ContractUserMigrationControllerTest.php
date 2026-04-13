@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
@@ -9,15 +17,18 @@ use App\Service\IdMappingService;
 use App\Service\LookupCacheService;
 use App\Service\MigrationAuditService;
 use Hyperf\Contract\ValidatorInterface;
-use Hyperf\Support\MessageBag;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\Support\MessageBag;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
-use Mockery;
 use HyperfTest\UnitTestCase;
+use Mockery;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
+/**
+ * @internal
+ */
 #[CoversClass(ContractUserMigrationController::class)]
 #[RunTestsInSeparateProcesses]
 #[PreserveGlobalState(false)]
@@ -58,10 +69,10 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
     public function testMigrateResolvesLegacyFKsAndPassesResolvedUuidsToValidator(): void
     {
         $batch = [[
-            'legacy_user_id'     => 'USR-001',
+            'legacy_user_id' => 'USR-001',
             'legacy_contract_id' => 'LEG-001',
-            'legacy_role_id'     => 'ROLE-ADMIN',
-            'contract_admin'     => true,
+            'legacy_role_id' => 'ROLE-ADMIN',
+            'contract_admin' => true,
         ]];
 
         $request = $this->createMock(RequestInterface::class);
@@ -83,16 +94,16 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
             ->method('getServerParams')
             ->willReturn(['remote_addr' => '127.0.0.1']);
 
-        $userUuid     = 'aaaaaaaa-0000-4000-8000-000000000001';
+        $userUuid = 'aaaaaaaa-0000-4000-8000-000000000001';
         $contractUuid = 'bbbbbbbb-0000-4000-8000-000000000002';
-        $roleUuid     = 'cccccccc-0000-4000-8000-000000000003';
+        $roleUuid = 'cccccccc-0000-4000-8000-000000000003';
 
         $idMappingService = $this->createMock(IdMappingService::class);
         $idMappingService->expects($this->exactly(2))
             ->method('resolve')
             ->willReturnMap([
-                ['users',     'USR-001',    'contract-uuid-1', $userUuid],
-                ['contracts', 'LEG-001',    'contract-uuid-1', $contractUuid],
+                ['users', 'USR-001', 'contract-uuid-1', $userUuid],
+                ['contracts', 'LEG-001', 'contract-uuid-1', $contractUuid],
             ]);
         $lookupCacheService = $this->createMock(LookupCacheService::class);
         $lookupCacheService->expects($this->once())
@@ -114,12 +125,12 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
             ->method('make')
             ->with(
                 $this->callback(function (array $record) use ($userUuid, $contractUuid, $roleUuid): bool {
-                    $this->assertSame($userUuid,     $record['user_id']);
+                    $this->assertSame($userUuid, $record['user_id']);
                     $this->assertSame($contractUuid, $record['contract_id']);
-                    $this->assertSame($roleUuid,     $record['role_id']);
-                    $this->assertArrayNotHasKey('legacy_user_id',     $record);
+                    $this->assertSame($roleUuid, $record['role_id']);
+                    $this->assertArrayNotHasKey('legacy_user_id', $record);
                     $this->assertArrayNotHasKey('legacy_contract_id', $record);
-                    $this->assertArrayNotHasKey('legacy_role_id',     $record);
+                    $this->assertArrayNotHasKey('legacy_role_id', $record);
 
                     return true;
                 }),
@@ -139,10 +150,10 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
     public function testMigrateReportsValidationErrorWhenLegacyIdsDoNotResolve(): void
     {
         $batch = [[
-            'legacy_user_id'     => 'USR-MISSING',
+            'legacy_user_id' => 'USR-MISSING',
             'legacy_contract_id' => 'LEG-MISSING',
-            'legacy_role_id'     => 'ROLE-MISSING',
-            'contract_admin'     => false,
+            'legacy_role_id' => 'ROLE-MISSING',
+            'contract_admin' => false,
         ]];
 
         $request = $this->createMock(RequestInterface::class);
@@ -161,9 +172,9 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
 
         $messageBag = $this->createMock(MessageBag::class);
         $messageBag->method('toArray')->willReturn([
-            'user_id'     => ['The user_id field is required.'],
+            'user_id' => ['The user_id field is required.'],
             'contract_id' => ['The contract_id field is required.'],
-            'role_id'     => ['The role_id field is required.'],
+            'role_id' => ['The role_id field is required.'],
         ]);
 
         $validator = $this->createMock(ValidatorInterface::class);
@@ -182,9 +193,9 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
         $this->assertCount(1, $result['errors']);
         $this->assertSame(0, $result['errors'][0]['index']);
         $this->assertNull($result['errors'][0]['legacy_id']);
-        $this->assertArrayHasKey('user_id',     $result['errors'][0]['validation_errors']);
+        $this->assertArrayHasKey('user_id', $result['errors'][0]['validation_errors']);
         $this->assertArrayHasKey('contract_id', $result['errors'][0]['validation_errors']);
-        $this->assertArrayHasKey('role_id',     $result['errors'][0]['validation_errors']);
+        $this->assertArrayHasKey('role_id', $result['errors'][0]['validation_errors']);
     }
 
     public function testMigrateStripsMetaFieldsFromPivotRecordBeforeValidation(): void
@@ -192,13 +203,13 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
         // Ensures legacy_id, id, created_at, updated_at are removed before
         // the record is validated and potentially inserted into the pivot table.
         $batch = [[
-            'legacy_id'      => 'LEG-001',
-            'id'             => 'some-uuid',
-            'created_at'     => '2020-01-01 00:00:00',
-            'updated_at'     => '2020-01-01 00:00:00',
-            'user_id'        => 'aaaaaaaa-0000-4000-8000-000000000001',
-            'contract_id'    => 'bbbbbbbb-0000-4000-8000-000000000002',
-            'role_id'        => 'cccccccc-0000-4000-8000-000000000003',
+            'legacy_id' => 'LEG-001',
+            'id' => 'some-uuid',
+            'created_at' => '2020-01-01 00:00:00',
+            'updated_at' => '2020-01-01 00:00:00',
+            'user_id' => 'aaaaaaaa-0000-4000-8000-000000000001',
+            'contract_id' => 'bbbbbbbb-0000-4000-8000-000000000002',
+            'role_id' => 'cccccccc-0000-4000-8000-000000000003',
             'contract_admin' => true,
         ]];
 
@@ -222,8 +233,8 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
             ->method('make')
             ->with(
                 $this->callback(function (array $record): bool {
-                    $this->assertArrayNotHasKey('legacy_id',  $record);
-                    $this->assertArrayNotHasKey('id',         $record);
+                    $this->assertArrayNotHasKey('legacy_id', $record);
+                    $this->assertArrayNotHasKey('id', $record);
                     $this->assertArrayNotHasKey('created_at', $record);
                     $this->assertArrayNotHasKey('updated_at', $record);
 

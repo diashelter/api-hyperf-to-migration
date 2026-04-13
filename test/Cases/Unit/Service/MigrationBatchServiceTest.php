@@ -1,16 +1,28 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Service;
 
+use App\Model\MigrationBatch;
 use App\Service\MigrationBatchService;
+use HyperfTest\UnitTestCase;
 use Mockery;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
-use HyperfTest\UnitTestCase;
 
+/**
+ * @internal
+ */
 #[CoversClass(MigrationBatchService::class)]
 #[RunTestsInSeparateProcesses]
 #[PreserveGlobalState(false)]
@@ -20,7 +32,7 @@ final class MigrationBatchServiceTest extends UnitTestCase
     {
         $model = Mockery::mock('alias:App\Model\MigrationBatch');
         $query = Mockery::mock();
-        $createdBatch = new class extends \App\Model\MigrationBatch {
+        $createdBatch = new class extends MigrationBatch {
             public function __construct()
             {
             }

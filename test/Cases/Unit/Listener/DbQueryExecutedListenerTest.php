@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Listener;
 
@@ -14,6 +22,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
+/**
+ * @internal
+ */
 #[CoversClass(DbQueryExecutedListener::class)]
 final class DbQueryExecutedListenerTest extends UnitTestCase
 {

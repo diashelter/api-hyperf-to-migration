@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -20,6 +28,7 @@ use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
 use Ramsey\Uuid\Uuid;
+use Throwable;
 
 /**
  * Pivot table contract_user — sem id próprio, sem timestamps.
@@ -30,6 +39,10 @@ use Ramsey\Uuid\Uuid;
 #[HyperfServer('http')]
 class ContractUserMigrationController
 {
+    private const MAX_BATCH_SIZE = 500;
+
+    private const ENTITY = 'contract_users';
+
     #[Inject]
     protected RequestInterface $request;
 
@@ -47,10 +60,6 @@ class ContractUserMigrationController
 
     #[Inject]
     protected MigrationAuditService $auditService;
-
-    private const MAX_BATCH_SIZE = 500;
-
-    private const ENTITY = 'contract_users';
 
     #[OA\Post(
         path: '/api/v1/migration/contract-users',
@@ -77,16 +86,16 @@ class ContractUserMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_user_id'     => 'USR-001',
+                            'legacy_user_id' => 'USR-001',
                             'legacy_contract_id' => 'CONTRACT-001',
-                            'legacy_role_id'     => 'owner',
-                            'contract_admin'     => true,
+                            'legacy_role_id' => 'owner',
+                            'contract_admin' => true,
                         ],
                         [
-                            'legacy_user_id'     => 'USR-002',
+                            'legacy_user_id' => 'USR-002',
                             'legacy_contract_id' => 'CONTRACT-001',
-                            'legacy_role_id'     => 'user',
-                            'contract_admin'     => false,
+                            'legacy_role_id' => 'user',
+                            'contract_admin' => false,
                         ],
                     ],
                 ]
@@ -99,9 +108,9 @@ class ContractUserMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 2,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 2,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => [],
                     ]
                 )
@@ -137,9 +146,9 @@ class ContractUserMigrationController
         );
 
         $rules = [
-            'user_id'        => 'required|uuid',
-            'contract_id'    => 'required|uuid',
-            'role_id'        => 'required|uuid',
+            'user_id' => 'required|uuid',
+            'contract_id' => 'required|uuid',
+            'role_id' => 'required|uuid',
             'contract_admin' => 'nullable|boolean',
         ];
 
@@ -170,8 +179,8 @@ class ContractUserMigrationController
             $validator = $this->validatorFactory->make($record, $rules);
             if ($validator->fails()) {
                 $error = [
-                    'index'             => $index,
-                    'legacy_id'         => null,
+                    'index' => $index,
+                    'legacy_id' => null,
                     'validation_errors' => $validator->errors()->toArray(),
                 ];
                 $validationErrors[] = $error;
@@ -212,7 +221,7 @@ class ContractUserMigrationController
                         'error_message' => null,
                     ];
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 Db::connection('conciliador_web')->rollBack();
                 $failed = \count($records);
                 $errors[] = ['message' => $e->getMessage()];
@@ -229,10 +238,10 @@ class ContractUserMigrationController
         }
 
         $response = [
-            'inserted'    => $inserted,
-            'skipped'     => $skipped,
-            'failed'      => $failed + \count($validationErrors),
-            'errors'      => array_merge($validationErrors, $errors),
+            'inserted' => $inserted,
+            'skipped' => $skipped,
+            'failed' => $failed + \count($validationErrors),
+            'errors' => array_merge($validationErrors, $errors),
             'id_mappings' => [],
         ];
 

@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller;
 
@@ -95,8 +103,8 @@ abstract class AbstractMigrationController
 
             if ($validator->fails()) {
                 $validationErrors[] = [
-                    'index'             => $index,
-                    'legacy_id'         => $record['legacy_id'] ?? null,
+                    'index' => $index,
+                    'legacy_id' => $record['legacy_id'] ?? null,
                     'validation_errors' => $validator->errors()->toArray(),
                 ];
             } else {
@@ -232,15 +240,15 @@ abstract class AbstractMigrationController
 
         $response = [
             'migration_batch_id' => $batchId,
-            'entity'             => $entity,
-            'total_received'     => \count($rawBatch),
-            'status'             => $totalFailed > 0 ? 'completed_with_errors' : 'completed',
-            'inserted'           => $results['inserted'],
-            'skipped'            => \count($skipped),
-            'failed'             => $totalFailed,
-            'errors'             => $allErrors,
-            'id_mappings'        => array_replace($existingMappings, $idMappings),
-            'status_url'         => "/api/v1/migration/status/{$batchId}",
+            'entity' => $entity,
+            'total_received' => \count($rawBatch),
+            'status' => $totalFailed > 0 ? 'completed_with_errors' : 'completed',
+            'inserted' => $results['inserted'],
+            'skipped' => \count($skipped),
+            'failed' => $totalFailed,
+            'errors' => $allErrors,
+            'id_mappings' => array_replace($existingMappings, $idMappings),
+            'status_url' => "/api/v1/migration/status/{$batchId}",
         ];
 
         $this->auditService?->close($requestId, $response, $batchId);
@@ -342,17 +350,17 @@ abstract class AbstractMigrationController
             if ($normalizeStrings) {
                 foreach (array_keys($record) as $field) {
                     if (
-                        $field === 'password' ||
-                        $field === 'contractor_type' ||
-                        $field === 'tax_regime' ||
-                        $field === 'format' ||
-                        $field === 'movement_type' ||
-                        $field === 'sector' ||
-                        $field === 'origin' ||
-                        $field === 'debit_credit' ||
-                        $field === 'records_origin' ||
-                        str_ends_with($field, '_id') ||
-                        ! is_string($record[$field])
+                        $field === 'password'
+                        || $field === 'contractor_type'
+                        || $field === 'tax_regime'
+                        || $field === 'format'
+                        || $field === 'movement_type'
+                        || $field === 'sector'
+                        || $field === 'origin'
+                        || $field === 'debit_credit'
+                        || $field === 'records_origin'
+                        || str_ends_with($field, '_id')
+                        || ! is_string($record[$field])
                     ) {
                         continue;
                     }

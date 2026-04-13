@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,37 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class PlanItemMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'plan_items';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'plan_items';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 1000;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'name'             => 'required|string|max:70',
-            'complete_account' => 'nullable|string|max:20',
-            'reduced_account'  => 'nullable|string|max:20',
-            'type'             => 'nullable|string|max:50',
-            'origin'           => 'nullable|in:C,D,I',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/plan-items',
         summary: 'Migrar itens do plano de contas',
@@ -75,9 +52,9 @@ class PlanItemMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 2,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 2,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['PI-001' => 'ccc33333-0000-0000-0000-000000000001', 'PI-002' => 'ccc33333-0000-0000-0000-000000000002'],
                     ]
                 )
@@ -101,6 +78,37 @@ class PlanItemMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'plan_items';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'plan_items';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 1000;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'name' => 'required|string|max:70',
+            'complete_account' => 'nullable|string|max:20',
+            'reduced_account' => 'nullable|string|max:20',
+            'type' => 'nullable|string|max:50',
+            'origin' => 'nullable|in:C,D,I',
+        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

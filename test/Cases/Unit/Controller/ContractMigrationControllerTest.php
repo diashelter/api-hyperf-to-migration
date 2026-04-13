@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
@@ -10,12 +18,15 @@ use App\Service\MigrationAuditService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
 use Hyperf\Contract\ValidatorInterface;
-use Hyperf\Support\MessageBag;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\Support\MessageBag;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 
+/**
+ * @internal
+ */
 #[CoversClass(ContractMigrationController::class)]
 final class ContractMigrationControllerTest extends UnitTestCase
 {
@@ -60,14 +71,14 @@ final class ContractMigrationControllerTest extends UnitTestCase
     public function testMigrateTransformsAndPersistsValidBatch(): void
     {
         $batch = [[
-            'legacy_id'       => 'LEG-001',
-            'cpf_cnpj'        => '12345678000195',
-            'corporate_name'  => 'Empresa Teste Ltda',
-            'name'            => 'Empresa Teste',
-            'email'           => 'contato@teste.com',
-            'phone'           => '11987654321',
+            'legacy_id' => 'LEG-001',
+            'cpf_cnpj' => '12345678000195',
+            'corporate_name' => 'Empresa Teste Ltda',
+            'name' => 'Empresa Teste',
+            'email' => 'contato@teste.com',
+            'phone' => '11987654321',
             'contractor_type' => 'company',
-            'company_count'   => 5,
+            'company_count' => 5,
         ]];
 
         $request = $this->createMock(RequestInterface::class);
@@ -149,7 +160,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
     {
         $batch = [[
             'legacy_id' => 'LEG-BAD',
-            'name'      => 'Empresa',
+            'name' => 'Empresa',
             // missing: cpf_cnpj, corporate_name, contractor_type, company_count
         ]];
 
@@ -163,10 +174,10 @@ final class ContractMigrationControllerTest extends UnitTestCase
 
         $messageBag = $this->createMock(MessageBag::class);
         $messageBag->method('toArray')->willReturn([
-            'cpf_cnpj'        => ['The cpf_cnpj field is required.'],
-            'corporate_name'  => ['The corporate_name field is required.'],
+            'cpf_cnpj' => ['The cpf_cnpj field is required.'],
+            'corporate_name' => ['The corporate_name field is required.'],
             'contractor_type' => ['The contractor_type field is required.'],
-            'company_count'   => ['The company_count field is required.'],
+            'company_count' => ['The company_count field is required.'],
         ]);
 
         $validator = $this->createMock(ValidatorInterface::class);

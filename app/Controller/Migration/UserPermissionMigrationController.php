@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -20,6 +28,7 @@ use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
 use Ramsey\Uuid\Uuid;
+use Throwable;
 
 /**
  * Fase 2c — Revoga permissões concedidas automaticamente pelo trigger seed_permission.
@@ -39,24 +48,6 @@ use Ramsey\Uuid\Uuid;
 #[HyperfServer('http')]
 class UserPermissionMigrationController
 {
-    #[Inject]
-    protected RequestInterface $request;
-
-    #[Inject]
-    protected ResponseInterface $response;
-
-    #[Inject]
-    protected IdMappingService $idMappingService;
-
-    #[Inject]
-    protected LookupCacheService $lookupCacheService;
-
-    #[Inject]
-    protected ValidatorFactoryInterface $validatorFactory;
-
-    #[Inject]
-    protected MigrationAuditService $auditService;
-
     private const MAX_BATCH_SIZE = 500;
 
     private const ENTITY = 'user_permissions';
@@ -75,28 +66,46 @@ class UserPermissionMigrationController
      */
     private const PERMISSION_MAP = [
         // Usuários
-        'can_create_user'          => ['user:create'],
-        'can_edit_user'            => ['user:update'],
-        'can_delete_user'          => ['user:delete'],
+        'can_create_user' => ['user:create'],
+        'can_edit_user' => ['user:update'],
+        'can_delete_user' => ['user:delete'],
         // Empresas
-        'can_create_company'       => ['company:create'],
-        'can_edit_company'         => ['company:update'],
-        'can_delete_company'       => ['company:delete'],
+        'can_create_company' => ['company:create'],
+        'can_edit_company' => ['company:update'],
+        'can_delete_company' => ['company:delete'],
         // Layouts
-        'can_create_layout'        => ['layout:create'],
-        'can_edit_layout'          => ['layout:update'],
-        'can_delete_layout'        => ['layout:delete'],
+        'can_create_layout' => ['layout:create'],
+        'can_edit_layout' => ['layout:update'],
+        'can_delete_layout' => ['layout:delete'],
         // Regras compartilhadas (módulo 'rules' no conciliador_web)
-        'can_create_shared_rules'  => ['rules:create'],
-        'can_edit_shared_rules'    => ['rules:update'],
-        'can_delete_shared_rules'  => ['rules:delete'],
+        'can_create_shared_rules' => ['rules:create'],
+        'can_edit_shared_rules' => ['rules:update'],
+        'can_delete_shared_rules' => ['rules:delete'],
         // Importação
-        'can_manage_import'        => ['import:create', 'import:update', 'import:delete'],
+        'can_manage_import' => ['import:create', 'import:update', 'import:delete'],
         // Exportação
-        'can_manage_export'        => ['export:create', 'export:update', 'export:delete'],
+        'can_manage_export' => ['export:create', 'export:update', 'export:delete'],
         // Conciliação
         'can_manage_confrontation' => ['confrontation:create', 'confrontation:update', 'confrontation:delete'],
     ];
+
+    #[Inject]
+    protected RequestInterface $request;
+
+    #[Inject]
+    protected ResponseInterface $response;
+
+    #[Inject]
+    protected IdMappingService $idMappingService;
+
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
+
+    #[Inject]
+    protected ValidatorFactoryInterface $validatorFactory;
+
+    #[Inject]
+    protected MigrationAuditService $auditService;
 
     #[OA\Post(
         path: '/api/v1/migration/user-permissions',
@@ -151,12 +160,12 @@ class UserPermissionMigrationController
                             ],
                             additionalProperties: new OA\AdditionalProperties(type: 'boolean'),
                             example: [
-                                'legacy_user_id'       => 'USR-002',
-                                'can_create_layout'    => false,
-                                'can_edit_layout'      => false,
-                                'can_delete_layout'    => false,
+                                'legacy_user_id' => 'USR-002',
+                                'can_create_layout' => false,
+                                'can_edit_layout' => false,
+                                'can_delete_layout' => false,
                                 'can_create_shared_rules' => false,
-                                'can_edit_shared_rules'   => false,
+                                'can_edit_shared_rules' => false,
                                 'can_delete_shared_rules' => false,
                             ]
                         )
@@ -171,14 +180,14 @@ class UserPermissionMigrationController
                 content: new OA\JsonContent(
                     properties: [
                         new OA\Property(property: 'deleted', type: 'integer', example: 10),
-                        new OA\Property(property: 'failed',  type: 'integer', example: 0),
-                        new OA\Property(property: 'errors',  type: 'array',   items: new OA\Items(type: 'object')),
+                        new OA\Property(property: 'failed', type: 'integer', example: 0),
+                        new OA\Property(property: 'errors', type: 'array', items: new OA\Items(type: 'object')),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: 'Token inválido',               content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite',  content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 429, description: 'Rate limit excedido',           content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
         ]
     )]
     #[PostMapping(path: 'user-permissions')]
@@ -207,8 +216,8 @@ class UserPermissionMigrationController
         );
 
         $deleted = 0;
-        $failed  = 0;
-        $errors  = [];
+        $failed = 0;
+        $errors = [];
         $recordLogs = [];
 
         foreach ($batch as $index => $record) {
@@ -222,7 +231,7 @@ class UserPermissionMigrationController
                     'status' => 'failed',
                     'error_message' => 'Missing legacy_user_id',
                 ];
-                $failed++;
+                ++$failed;
                 continue;
             }
 
@@ -230,9 +239,9 @@ class UserPermissionMigrationController
 
             if ($userId === null) {
                 $errors[] = [
-                    'index'          => $index,
+                    'index' => $index,
                     'legacy_user_id' => $legacyUserId,
-                    'error'          => "User mapping not found for legacy_user_id '{$legacyUserId}'",
+                    'error' => "User mapping not found for legacy_user_id '{$legacyUserId}'",
                 ];
                 $recordLogs[] = [
                     'legacy_id' => (string) $legacyUserId,
@@ -240,7 +249,7 @@ class UserPermissionMigrationController
                     'status' => 'failed',
                     'error_message' => "User mapping not found for legacy_user_id '{$legacyUserId}'",
                 ];
-                $failed++;
+                ++$failed;
                 continue;
             }
 
@@ -252,13 +261,13 @@ class UserPermissionMigrationController
 
                 if ($permissionId === null) {
                     $errors[] = [
-                        'index'          => $index,
+                        'index' => $index,
                         'legacy_user_id' => $legacyUserId,
                         'permission_key' => $permissionKey,
-                        'error'          => "Permission '{$permissionKey}' not found in lookup cache. Run: php bin/hyperf.php migration:seed-lookups permissions",
+                        'error' => "Permission '{$permissionKey}' not found in lookup cache. Run: php bin/hyperf.php migration:seed-lookups permissions",
                     ];
                     $recordFailed = true;
-                    $failed++;
+                    ++$failed;
                     continue;
                 }
 
@@ -270,16 +279,16 @@ class UserPermissionMigrationController
                         ->where('permission_id', $permissionId)
                         ->delete();
 
-                    $deleted++;
-                } catch (\Throwable $e) {
+                    ++$deleted;
+                } catch (Throwable $e) {
                     $errors[] = [
-                        'index'          => $index,
+                        'index' => $index,
                         'legacy_user_id' => $legacyUserId,
                         'permission_key' => $permissionKey,
-                        'error'          => $e->getMessage(),
+                        'error' => $e->getMessage(),
                     ];
                     $recordFailed = true;
-                    $failed++;
+                    ++$failed;
                 }
             }
 
@@ -293,8 +302,8 @@ class UserPermissionMigrationController
 
         $response = [
             'deleted' => $deleted,
-            'failed'  => $failed,
-            'errors'  => $errors,
+            'failed' => $failed,
+            'errors' => $errors,
         ];
 
         $this->auditService->close($requestId, $response);
@@ -312,7 +321,7 @@ class UserPermissionMigrationController
      * Apenas flags com valor estritamente false são revogadas.
      * Flags true, null ou ausentes são ignoradas.
      *
-     * @return string[]  ex: ['import:view', 'rules:delete']
+     * @return string[] ex: ['import:view', 'rules:delete']
      */
     private function collectRevokeKeys(array $record): array
     {

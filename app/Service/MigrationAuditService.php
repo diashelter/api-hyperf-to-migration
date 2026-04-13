@@ -1,12 +1,21 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Service;
 
 use App\Model\MigrationAuditLog;
 use Hyperf\Di\Annotation\Inject;
 use Ramsey\Uuid\Uuid;
+use Throwable;
 
 use function Hyperf\Support\env;
 
@@ -45,7 +54,7 @@ class MigrationAuditService
                 'request_payload' => json_encode($rawBatch, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 'started_at' => date('Y-m-d H:i:s'),
             ]);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             error_log(sprintf('[migration-audit] open failed: %s', $exception->getMessage()));
         }
     }
@@ -93,7 +102,7 @@ class MigrationAuditService
                     'completed_at' => date('Y-m-d H:i:s'),
                     'processing_time_ms' => $this->computeProcessingTimeMs($requestId),
                 ]);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             error_log(sprintf('[migration-audit] close failed: %s', $exception->getMessage()));
         }
     }
@@ -123,7 +132,7 @@ class MigrationAuditService
 
         try {
             $this->insertService->insertSync('migration_record_logs', $payload, 'default');
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             error_log(sprintf('[migration-audit] logRecords failed: %s', $exception->getMessage()));
         }
     }

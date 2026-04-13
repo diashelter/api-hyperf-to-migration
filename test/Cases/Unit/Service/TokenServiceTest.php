@@ -1,14 +1,25 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Service;
 
 use App\Service\TokenService;
 use Firebase\JWT\SignatureInvalidException;
-use PHPUnit\Framework\Attributes\CoversClass;
 use HyperfTest\UnitTestCase;
+use PHPUnit\Framework\Attributes\CoversClass;
 
+/**
+ * @internal
+ */
 #[CoversClass(TokenService::class)]
 final class TokenServiceTest extends UnitTestCase
 {

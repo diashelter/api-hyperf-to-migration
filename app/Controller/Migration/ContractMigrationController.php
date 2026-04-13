@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -22,6 +30,22 @@ class ContractMigrationController extends AbstractMigrationController
 {
     #[Inject]
     protected LookupCacheService $lookupCacheService;
+
+    #[PostMapping(path: 'contracts')]
+    public function migrate(): array
+    {
+        $batch = $this->request->input('batch', []);
+
+        if (empty($batch)) {
+            return ['error' => 'Empty batch', 'code' => 422];
+        }
+
+        if (count($batch) > $this->getMaxBatchSize()) {
+            return ['error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}", 'code' => 422];
+        }
+
+        return $this->syncMigrate();
+    }
 
     protected function getTable(): string
     {
@@ -46,23 +70,23 @@ class ContractMigrationController extends AbstractMigrationController
     protected function validationRules(): array
     {
         return [
-            'cpf_cnpj'           => 'required|string|size:14',
-            'corporate_name'     => 'required|string|max:255',
-            'name'               => 'required|string|max:255',
-            'email'              => 'nullable|email|max:255',
-            'phone'              => 'nullable|string|max:15',
-            'contractor_type'    => 'required|in:individual,company',
-            'company_count'      => 'required|integer|min:1',
-            'user_count'         => 'nullable|integer|min:1',
-            'street'             => 'nullable|string|max:255',
-            'number'             => 'nullable|string|max:50',
-            'neighborhood'       => 'nullable|string|max:100',
-            'city'               => 'nullable|string|max:100',
-            'complement'         => 'nullable|string',
-            'state'              => 'nullable|string|size:2',
-            'zipcode'            => 'nullable|string|max:10',
-            'activity_branch'    => 'nullable|string',
-            'is_approval'        => 'nullable|boolean',
+            'cpf_cnpj' => 'required|string|size:14',
+            'corporate_name' => 'required|string|max:255',
+            'name' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:15',
+            'contractor_type' => 'required|in:individual,company',
+            'company_count' => 'required|integer|min:1',
+            'user_count' => 'nullable|integer|min:1',
+            'street' => 'nullable|string|max:255',
+            'number' => 'nullable|string|max:50',
+            'neighborhood' => 'nullable|string|max:100',
+            'city' => 'nullable|string|max:100',
+            'complement' => 'nullable|string',
+            'state' => 'nullable|string|size:2',
+            'zipcode' => 'nullable|string|max:10',
+            'activity_branch' => 'nullable|string',
+            'is_approval' => 'nullable|boolean',
             'legacy_database_id' => 'nullable|string|max:100',
         ];
     }
@@ -91,20 +115,20 @@ class ContractMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'              => 'CONTRACT-001',
-                            'cpf_cnpj'               => '12345678000195',
-                            'corporate_name'         => 'Empresa Exemplo Ltda',
-                            'name'                   => 'Empresa Exemplo',
-                            'email'                  => 'contato@empresa.com',
-                            'phone'                  => '11987654321',
-                            'contractor_type'        => 'company',
-                            'company_count'          => 5,
-                            'user_count'             => 10,
-                            'street'                 => 'Rua das Flores',
-                            'number'                 => '123',
-                            'city'                   => 'São Paulo',
-                            'state'                  => 'SP',
-                            'zipcode'                => '01310100',
+                            'legacy_id' => 'CONTRACT-001',
+                            'cpf_cnpj' => '12345678000195',
+                            'corporate_name' => 'Empresa Exemplo Ltda',
+                            'name' => 'Empresa Exemplo',
+                            'email' => 'contato@empresa.com',
+                            'phone' => '11987654321',
+                            'contractor_type' => 'company',
+                            'company_count' => 5,
+                            'user_count' => 10,
+                            'street' => 'Rua das Flores',
+                            'number' => '123',
+                            'city' => 'São Paulo',
+                            'state' => 'SP',
+                            'zipcode' => '01310100',
                             'legacy_status_contract' => 'ATIVO',
                         ],
                     ],
@@ -118,9 +142,9 @@ class ContractMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['LEG-001' => '550e8400-e29b-41d4-a716-446655440000'],
                     ]
                 )
@@ -138,21 +162,5 @@ class ContractMigrationController extends AbstractMigrationController
         }
 
         return $record;
-    }
-
-    #[PostMapping(path: 'contracts')]
-    public function migrate(): array
-    {
-        $batch = $this->request->input('batch', []);
-
-        if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
-        }
-
-        if (count($batch) > $this->getMaxBatchSize()) {
-            return ['error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}", 'code' => 422];
-        }
-
-        return $this->syncMigrate();
     }
 }

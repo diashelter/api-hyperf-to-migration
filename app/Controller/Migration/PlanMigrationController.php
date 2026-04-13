@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,35 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class PlanMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'plans';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'plans';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 100;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'name'            => 'required|string|max:70',
-            'account_default' => 'nullable|string|max:50',
-            'code'            => 'nullable|int',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/plans',
         summary: 'Migrar planos de contas',
@@ -72,9 +51,9 @@ class PlanMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['PLN-001' => 'bbb22222-0000-0000-0000-000000000001'],
                     ]
                 )
@@ -98,6 +77,35 @@ class PlanMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'plans';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'plans';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 100;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'name' => 'required|string|max:70',
+            'account_default' => 'nullable|string|max:50',
+            'code' => 'nullable|int',
+        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

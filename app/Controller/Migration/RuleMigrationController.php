@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,56 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class RuleMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'rules';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'rules';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 500;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'debit_credit'                 => 'nullable|in:D,C',
-            'cpf_cnpj'                     => 'nullable|string',
-            'client_supplier'              => 'nullable|string',
-            'history'                      => 'nullable|string',
-            'bank'                         => 'nullable|string',
-            'filial'                       => 'nullable|string',
-            'additional_information'       => 'nullable|string',
-            'additional_information_2'     => 'nullable|string',
-            'additional_information_3'     => 'nullable|string',
-            'token'                        => 'nullable|string',
-            'id_history'                   => 'nullable|string|max:10',
-            'id_debit'                     => 'nullable|string|max:10',
-            'id_credit'                    => 'nullable|string|max:10',
-            'id_history_exp'               => 'nullable|string',
-            'id_participant_credit'        => 'nullable|string|max:10',
-            'id_participant_debit'         => 'nullable|string|max:10',
-            'id_cc_credit'                 => 'nullable|string|max:10',
-            'id_cc_debit'                  => 'nullable|string|max:10',
-            'exclusive'                    => 'nullable|boolean',
-            'reprocess'                    => 'nullable|boolean',
-            'invalid'                      => 'nullable|boolean',
-            'sort_order'                   => 'nullable|integer',
-            'automatic_launch'             => 'nullable|boolean',
-            'rule_extra'                   => 'nullable|string',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/rules',
         summary: 'Migrar regras de conciliação (async)',
@@ -82,18 +40,18 @@ class RuleMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'          => 'RUL-001',
-                            'history'            => 'Pagamento fornecedor',
-                            'client_supplier'    => 'Fornecedor ABC',
-                            'debit_credit'       => 'D',
-                            'id_history'         => 'A',
-                            'id_debit'           => 'B',
-                            'id_credit'          => 'C',
-                            'exclusive'          => false,
-                            'sort_order'         => 1,
-                            'automatic_launch'   => true,
-                            'legacy_company_id'  => 'EMP-001',
-                            'legacy_layout_id'   => 'LAY-001',
+                            'legacy_id' => 'RUL-001',
+                            'history' => 'Pagamento fornecedor',
+                            'client_supplier' => 'Fornecedor ABC',
+                            'debit_credit' => 'D',
+                            'id_history' => 'A',
+                            'id_debit' => 'B',
+                            'id_credit' => 'C',
+                            'exclusive' => false,
+                            'sort_order' => 1,
+                            'automatic_launch' => true,
+                            'legacy_company_id' => 'EMP-001',
+                            'legacy_layout_id' => 'LAY-001',
                             'legacy_contract_id' => 'LEG-001',
                         ],
                     ],
@@ -108,14 +66,14 @@ class RuleMigrationController extends AbstractMigrationController
                     ref: '#/components/schemas/AsyncMigrationResponse',
                     example: [
                         'migration_batch_id' => '880e8400-e29b-41d4-a716-446655440003',
-                        'entity'             => 'rules',
-                        'total_received'     => 1,
-                        'status'             => 'completed',
-                        'inserted'           => 1,
-                        'failed'             => 0,
-                        'errors'             => null,
-                        'id_mappings'        => ['RUL-001' => 'lll22222-0000-0000-0000-000000000001'],
-                        'status_url'         => '/api/v1/migration/status/880e8400-e29b-41d4-a716-446655440003',
+                        'entity' => 'rules',
+                        'total_received' => 1,
+                        'status' => 'completed',
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => null,
+                        'id_mappings' => ['RUL-001' => 'lll22222-0000-0000-0000-000000000001'],
+                        'status_url' => '/api/v1/migration/status/880e8400-e29b-41d4-a716-446655440003',
                     ]
                 )
             ),
@@ -140,6 +98,56 @@ class RuleMigrationController extends AbstractMigrationController
         return $this->asyncMigrate();
     }
 
+    protected function getTable(): string
+    {
+        return 'rules';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'rules';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 500;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'debit_credit' => 'nullable|in:D,C',
+            'cpf_cnpj' => 'nullable|string',
+            'client_supplier' => 'nullable|string',
+            'history' => 'nullable|string',
+            'bank' => 'nullable|string',
+            'filial' => 'nullable|string',
+            'additional_information' => 'nullable|string',
+            'additional_information_2' => 'nullable|string',
+            'additional_information_3' => 'nullable|string',
+            'token' => 'nullable|string',
+            'id_history' => 'nullable|string|max:10',
+            'id_debit' => 'nullable|string|max:10',
+            'id_credit' => 'nullable|string|max:10',
+            'id_history_exp' => 'nullable|string',
+            'id_participant_credit' => 'nullable|string|max:10',
+            'id_participant_debit' => 'nullable|string|max:10',
+            'id_cc_credit' => 'nullable|string|max:10',
+            'id_cc_debit' => 'nullable|string|max:10',
+            'exclusive' => 'nullable|boolean',
+            'reprocess' => 'nullable|boolean',
+            'invalid' => 'nullable|boolean',
+            'sort_order' => 'nullable|integer',
+            'automatic_launch' => 'nullable|boolean',
+            'rule_extra' => 'nullable|string',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_company_id'])) {
@@ -152,8 +160,6 @@ class RuleMigrationController extends AbstractMigrationController
             unset($record['legacy_layout_id']);
         }
 
-        $record = $this->resolveContractIdFK($record, $contractId);
-
-        return $record;
+        return $this->resolveContractIdFK($record, $contractId);
     }
 }

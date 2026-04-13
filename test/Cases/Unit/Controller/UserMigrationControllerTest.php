@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
@@ -9,12 +17,15 @@ use App\Service\IdMappingService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
 use Hyperf\Contract\ValidatorInterface;
-use Hyperf\Support\MessageBag;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\Support\MessageBag;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 
+/**
+ * @internal
+ */
 #[CoversClass(UserMigrationController::class)]
 final class UserMigrationControllerTest extends UnitTestCase
 {
@@ -60,13 +71,13 @@ final class UserMigrationControllerTest extends UnitTestCase
     {
         $rawPassword = 'senha_legado_123';
         $batch = [[
-            'legacy_id'   => 'USR-001',
-            'name'        => 'João Silva',
-            'email'       => 'joao.silva@empresa.com',
-            'password'    => $rawPassword,
-            'is_admin'    => false,
+            'legacy_id' => 'USR-001',
+            'name' => 'João Silva',
+            'email' => 'joao.silva@empresa.com',
+            'password' => $rawPassword,
+            'is_admin' => false,
             'is_internal' => false,
-            'status'      => true,
+            'status' => true,
         ]];
 
         $request = $this->createMock(RequestInterface::class);
@@ -142,8 +153,8 @@ final class UserMigrationControllerTest extends UnitTestCase
     {
         $batch = [[
             'legacy_id' => 'USR-BAD',
-            'name'      => 'Usuário Inválido',
-            'password'  => 'senha123',
+            'name' => 'Usuário Inválido',
+            'password' => 'senha123',
             // missing: email
         ]];
 

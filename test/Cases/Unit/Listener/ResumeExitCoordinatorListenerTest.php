@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Listener;
 
@@ -8,12 +16,15 @@ use App\Listener\ResumeExitCoordinatorListener;
 use Hyperf\Command\Command;
 use Hyperf\Command\Event\AfterExecute;
 use Hyperf\Coordinator\Constants;
-use Mockery;
 use HyperfTest\UnitTestCase;
+use Mockery;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
+/**
+ * @internal
+ */
 #[CoversClass(ResumeExitCoordinatorListener::class)]
 #[RunTestsInSeparateProcesses]
 #[PreserveGlobalState(false)]

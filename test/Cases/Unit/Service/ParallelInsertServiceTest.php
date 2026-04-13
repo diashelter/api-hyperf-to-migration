@@ -1,17 +1,28 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Service;
 
 use App\Service\ParallelInsertService;
+use HyperfTest\UnitTestCase;
 use Mockery;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use RuntimeException;
-use HyperfTest\UnitTestCase;
 
+/**
+ * @internal
+ */
 #[CoversClass(ParallelInsertService::class)]
 #[RunTestsInSeparateProcesses]
 #[PreserveGlobalState(false)]
