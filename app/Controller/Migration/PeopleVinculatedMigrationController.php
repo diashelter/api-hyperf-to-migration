@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,36 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class PeopleVinculatedMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'people_vinculated';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'people_vinculated';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 1000;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'debit_account'   => 'nullable|string|max:10',
-            'credit_account'  => 'nullable|string|max:10',
-            'participant'     => 'nullable|string|max:100',
-            'vinculated_name' => 'nullable|string|max:150',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/people-vinculated',
         summary: 'Migrar vínculos de participantes',
@@ -62,12 +40,12 @@ class PeopleVinculatedMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'          => 'PV-001',
-                            'debit_account'       => '1.1.01',
-                            'credit_account'      => '4.1.01',
-                            'participant'         => 'Maria Santos',
-                            'legacy_people_id'    => 'PEO-001',
-                            'legacy_company_id'   => 'EMP-001',
+                            'legacy_id' => 'PV-001',
+                            'debit_account' => '1.1.01',
+                            'credit_account' => '4.1.01',
+                            'participant' => 'Maria Santos',
+                            'legacy_people_id' => 'PEO-001',
+                            'legacy_company_id' => 'EMP-001',
                         ],
                     ],
                 ]
@@ -80,9 +58,9 @@ class PeopleVinculatedMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['PV-001' => 'hhh88888-0000-0000-0000-000000000001'],
                     ]
                 )
@@ -106,6 +84,36 @@ class PeopleVinculatedMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'people_vinculated';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'people_vinculated';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 1000;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'debit_account' => 'nullable|string|max:10',
+            'credit_account' => 'nullable|string|max:10',
+            'participant' => 'nullable|string|max:100',
+            'vinculated_name' => 'nullable|string|max:150',
+        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

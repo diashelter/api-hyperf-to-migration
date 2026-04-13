@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,37 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class ImportMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'imports';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'imports';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 100;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'name'             => 'required|string|max:255',
-            'total_files'      => 'required|integer|min:1',
-            'initial_period'   => 'nullable|date',
-            'final_period'     => 'nullable|date',
-            'previous_balance' => 'nullable|numeric',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/imports',
         summary: 'Migrar importações',
@@ -63,15 +40,15 @@ class ImportMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'                => 'IMP-001',
-                            'name'                     => 'Extrato Jan/2024',
-                            'total_files'              => 1,
-                            'initial_period'           => '2024-01-01',
-                            'final_period'             => '2024-01-31',
-                            'previous_balance'         => 1500.00,
-                            'legacy_user_id'           => 'USR-001',
-                            'legacy_company_id'        => 'EMP-001',
-                            'legacy_contract_id'       => 'LEG-001',
+                            'legacy_id' => 'IMP-001',
+                            'name' => 'Extrato Jan/2024',
+                            'total_files' => 1,
+                            'initial_period' => '2024-01-01',
+                            'final_period' => '2024-01-31',
+                            'previous_balance' => 1500.00,
+                            'legacy_user_id' => 'USR-001',
+                            'legacy_company_id' => 'EMP-001',
+                            'legacy_contract_id' => 'LEG-001',
                             'legacy_company_layout_id' => 'CL-001',
                         ],
                     ],
@@ -85,9 +62,9 @@ class ImportMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['IMP-001' => 'iii99999-0000-0000-0000-000000000001'],
                     ]
                 )
@@ -111,6 +88,37 @@ class ImportMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'imports';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'imports';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 100;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'total_files' => 'required|integer|min:1',
+            'initial_period' => 'nullable|date',
+            'final_period' => 'nullable|date',
+            'previous_balance' => 'nullable|numeric',
+        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

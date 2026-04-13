@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,34 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class PeopleMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'peoples';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'peoples';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 500;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'cpf_cnpj'       => 'nullable|string|max:14',
-            'corporate_name' => 'required|string|max:100',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/peoples',
         summary: 'Migrar participantes (peoples)',
@@ -72,9 +52,9 @@ class PeopleMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 2,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 2,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['PEO-001' => 'ggg77777-0000-0000-0000-000000000001', 'PEO-002' => 'ggg77777-0000-0000-0000-000000000002'],
                     ]
                 )
@@ -98,6 +78,34 @@ class PeopleMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'peoples';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'peoples';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 500;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'cpf_cnpj' => 'nullable|string|max:14',
+            'corporate_name' => 'required|string|max:100',
+        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

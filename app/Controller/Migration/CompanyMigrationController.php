@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,54 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class CompanyMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'companies';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'companies';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 100;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'code'           => 'required|int',
-            'cpf_cnpj'       => 'required|string|size:14',
-            'corporate_name' => 'nullable|string|max:255',
-            'external_code'  => 'nullable|string|max:20',
-            'tax_regime'     => 'required|in:Lucro Real,Lucro Presumido,Simples Nacional,Outros',
-            'street'         => 'nullable|string|max:255',
-            'number'         => 'nullable|string|max:50',
-            'neighborhood'   => 'nullable|string|max:100',
-            'city'           => 'nullable|string|max:100',
-            'complement'     => 'nullable|string',
-            'state'          => 'nullable|string|size:2',
-            'zipcode'        => 'nullable|string|max:10',
-            'state_registration'          => 'nullable|string|max:20',
-            'city_registration'           => 'nullable|string|max:20',
-            'phone'          => 'nullable|string|max:15',
-            'phone_cell'     => 'nullable|string|max:15',
-            'email'          => 'nullable|email|max:100',
-            'is_active'      => 'nullable|boolean',
-            'observation'    => 'nullable|string',
-            'use_participant'             => 'nullable|boolean',
-            'use_cost_center'             => 'nullable|boolean',
-            'use_auto_register_of_people' => 'nullable|boolean',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/companies',
         summary: 'Migrar empresas',
@@ -80,17 +40,17 @@ class CompanyMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'             => 'EMP-001',
-                            'code'                  => 'EMP001',
-                            'cpf_cnpj'              => '98765432000188',
-                            'corporate_name'        => 'Empresa Filial Ltda',
-                            'tax_regime'            => 'Lucro Presumido',
-                            'city'                  => 'Campinas',
-                            'state'                 => 'SP',
-                            'email'                 => 'filial@empresa.com',
-                            'is_active'             => true,
-                            'legacy_contract_id'    => 'LEG-001',
-                            'legacy_plan_id'        => 'PLN-001',
+                            'legacy_id' => 'EMP-001',
+                            'code' => 1,
+                            'cpf_cnpj' => '98765432000188',
+                            'corporate_name' => 'Empresa Filial Ltda',
+                            'tax_regime' => 'Lucro Presumido',
+                            'city' => 'Campinas',
+                            'state' => 'SP',
+                            'email' => 'filial@empresa.com',
+                            'is_active' => true,
+                            'legacy_contract_id' => 'LEG-001',
+                            'legacy_plan_id' => 'PLN-001',
                         ],
                     ],
                 ]
@@ -103,9 +63,9 @@ class CompanyMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['EMP-001' => 'eee55555-0000-0000-0000-000000000001'],
                     ]
                 )
@@ -131,6 +91,54 @@ class CompanyMigrationController extends AbstractMigrationController
         return $this->syncMigrate();
     }
 
+    protected function getTable(): string
+    {
+        return 'companies';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'companies';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 100;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'code' => 'required|int',
+            'cpf_cnpj' => 'required|string|size:14',
+            'corporate_name' => 'nullable|string|max:255',
+            'external_code' => 'nullable|string|max:20',
+            'tax_regime' => 'required|in:Lucro Real,Lucro Presumido,Simples Nacional,Outros',
+            'street' => 'nullable|string|max:255',
+            'number' => 'nullable|string|max:50',
+            'neighborhood' => 'nullable|string|max:100',
+            'city' => 'nullable|string|max:100',
+            'complement' => 'nullable|string',
+            'state' => 'nullable|string|size:2',
+            'zipcode' => 'nullable|string|max:10',
+            'state_registration' => 'nullable|string|max:20',
+            'city_registration' => 'nullable|string|max:20',
+            'phone' => 'nullable|string|max:15',
+            'phone_cell' => 'nullable|string|max:15',
+            'email' => 'nullable|email|max:100',
+            'is_active' => 'nullable|boolean',
+            'observation' => 'nullable|string',
+            'use_participant' => 'nullable|boolean',
+            'use_cost_center' => 'nullable|boolean',
+            'use_auto_register_of_people' => 'nullable|boolean',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         $record = $this->resolveContractIdFK($record, $contractId);
@@ -144,7 +152,7 @@ class CompanyMigrationController extends AbstractMigrationController
 
         if (! empty($record['legacy_rules_sharing_id'])) {
             $record['rules_sharing_id'] = $this->idMappingService->resolve('rules_sharings', $record['legacy_rules_sharing_id'], $contractId) ?? $record['rules_sharing_id'] ?? null;
-        }    
+        }
         unset($record['legacy_rules_sharing_id']);
         // Mutator do Model Company: city é convertido para UPPERCASE
         // (não aplicado automaticamente em DB::table()->insert())

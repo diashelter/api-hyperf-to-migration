@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -18,45 +26,6 @@ use OpenApi\Attributes as OA;
 #[HyperfServer('http')]
 class ConfrontationMigrationController extends AbstractMigrationController
 {
-    protected function getTable(): string
-    {
-        return 'confrontations';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'confrontations';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 50;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'description'             => 'required|string|max:255',
-            'user_create_id'          => 'required|uuid',
-            'user_create'             => 'required|string|max:255',
-            'company_name'            => 'nullable|string|max:255',
-            'company_cnpj'            => 'nullable|string|max:14',
-            'consider_date'           => 'nullable|boolean',
-            'consider_debit_credit'   => 'nullable|boolean',
-            'consider_document'       => 'nullable|boolean',
-            'consider_history'        => 'nullable|boolean',
-            'ignore_equals'           => 'nullable|boolean',
-            'selected_bank_financial' => 'nullable|string',
-            'selected_bank_bank'      => 'nullable|string',
-            'layouts'                 => 'nullable|string',
-        ];
-    }
-
     #[OA\Post(
         path: '/api/v1/migration/confrontations',
         summary: 'Migrar confrontações',
@@ -71,18 +40,18 @@ class ConfrontationMigrationController extends AbstractMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_id'               => 'CON-001',
-                            'description'             => 'Conciliação Jan/2024',
-                            'user_create_id'          => '550e8400-e29b-41d4-a716-446655440001',
-                            'user_create'             => 'João Silva',
-                            'company_name'            => 'Empresa Filial Ltda',
-                            'company_cnpj'            => '98765432000188',
-                            'consider_date'           => true,
-                            'consider_debit_credit'   => true,
-                            'consider_document'       => false,
-                            'ignore_equals'           => false,
-                            'legacy_contract_id'      => 'LEG-001',
-                            'legacy_company_id'       => 'EMP-001',
+                            'legacy_id' => 'CON-001',
+                            'description' => 'Conciliação Jan/2024',
+                            'user_create_id' => '550e8400-e29b-41d4-a716-446655440001',
+                            'user_create' => 'João Silva',
+                            'company_name' => 'Empresa Filial Ltda',
+                            'company_cnpj' => '98765432000188',
+                            'consider_date' => true,
+                            'consider_debit_credit' => true,
+                            'consider_document' => false,
+                            'ignore_equals' => false,
+                            'legacy_contract_id' => 'LEG-001',
+                            'legacy_company_id' => 'EMP-001',
                         ],
                     ],
                 ]
@@ -95,9 +64,9 @@ class ConfrontationMigrationController extends AbstractMigrationController
                 content: new OA\JsonContent(
                     ref: '#/components/schemas/SyncMigrationResponse',
                     example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
+                        'inserted' => 1,
+                        'failed' => 0,
+                        'errors' => [],
                         'id_mappings' => ['CON-001' => 'mmm33333-0000-0000-0000-000000000001'],
                     ]
                 )
@@ -121,6 +90,45 @@ class ConfrontationMigrationController extends AbstractMigrationController
         }
 
         return $this->syncMigrate();
+    }
+
+    protected function getTable(): string
+    {
+        return 'confrontations';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'confrontations';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 50;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'description' => 'required|string|max:255',
+            'user_create_id' => 'required|uuid',
+            'user_create' => 'required|string|max:255',
+            'company_name' => 'nullable|string|max:255',
+            'company_cnpj' => 'nullable|string|max:14',
+            'consider_date' => 'nullable|boolean',
+            'consider_debit_credit' => 'nullable|boolean',
+            'consider_document' => 'nullable|boolean',
+            'consider_history' => 'nullable|boolean',
+            'ignore_equals' => 'nullable|boolean',
+            'selected_bank_financial' => 'nullable|string',
+            'selected_bank_bank' => 'nullable|string',
+            'layouts' => 'nullable|string',
+        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array
