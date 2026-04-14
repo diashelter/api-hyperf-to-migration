@@ -353,6 +353,7 @@ abstract class AbstractMigrationController
                         $field === 'records_origin' ||
                         str_ends_with($field, '_id') ||
                         ! is_string($record[$field])
+                        || $field === 'status'
                     ) {
                         continue;
                     }

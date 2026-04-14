@@ -30,7 +30,7 @@ class ImportSessionMigrationController extends AbstractMigrationController
 
     protected function getMaxBatchSize(): int
     {
-        return 200;
+        return 300;
     }
 
     protected function getConnection(): string
@@ -41,10 +41,8 @@ class ImportSessionMigrationController extends AbstractMigrationController
     protected function validationRules(): array
     {
         return [
-            'original_file_name' => 'required|string|max:255',
-            'file_name'          => 'required|string',
-            'date_to_create'     => 'nullable|string',
-            'size'               => 'nullable|integer',
+            'legacy_layout_id'   => 'required|integer',
+            'legacy_import_id'   => 'nullable|string'
         ];
     }
 
@@ -120,7 +118,7 @@ class ImportSessionMigrationController extends AbstractMigrationController
             $record['layout_id'] = $this->idMappingService->resolve('layouts', $record['legacy_layout_id'], $contractId) ?? $record['layout_id'] ?? null;
             unset($record['legacy_layout_id']);
         }
-
+        $record['file_name'] = '';
         return $record;
     }
 }

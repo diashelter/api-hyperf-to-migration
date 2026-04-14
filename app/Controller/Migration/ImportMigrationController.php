@@ -30,7 +30,7 @@ class ImportMigrationController extends AbstractMigrationController
 
     protected function getMaxBatchSize(): int
     {
-        return 100;
+        return 300;
     }
 
     protected function getConnection(): string
@@ -41,7 +41,7 @@ class ImportMigrationController extends AbstractMigrationController
     protected function validationRules(): array
     {
         return [
-            'name'             => 'required|string|max:255',
+            'name'             => 'nullable|string|max:255',
             'total_files'      => 'required|integer|min:1',
             'initial_period'   => 'nullable|date',
             'final_period'     => 'nullable|date',
