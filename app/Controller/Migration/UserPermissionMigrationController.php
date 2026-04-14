@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace App\Controller\Migration;
 
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
 use App\Service\IdMappingService;
@@ -27,6 +29,7 @@ use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Ramsey\Uuid\Uuid;
 use Throwable;
 
@@ -176,7 +179,7 @@ class UserPermissionMigrationController
         responses: [
             new OA\Response(
                 response: 200,
-                description: 'Revogação concluída',
+                description: 'Revogação concluída (nenhuma falha)',
                 content: new OA\JsonContent(
                     properties: [
                         new OA\Property(property: 'deleted', type: 'integer', example: 10),
@@ -185,23 +188,26 @@ class UserPermissionMigrationController
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 207, description: 'Revogação parcial — algumas deleções falharam', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 413, description: 'Batch excede o limite máximo', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio ou todos falharam', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[PostMapping(path: 'user-permissions')]
-    public function migrate(): array
+    public function migrate(): PsrResponseInterface
     {
         $requestId = Uuid::uuid4()->toString();
         $batch = $this->request->input('batch', []);
 
         if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
+            throw new EmptyBatchException();
         }
 
         if (\count($batch) > self::MAX_BATCH_SIZE) {
-            return ['error' => 'Batch size exceeds maximum of ' . self::MAX_BATCH_SIZE, 'code' => 422];
+            throw new BatchTooLargeException(self::MAX_BATCH_SIZE);
         }
 
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
@@ -300,19 +306,21 @@ class UserPermissionMigrationController
             ];
         }
 
-        $response = [
+        $responsePayload = [
             'deleted' => $deleted,
             'failed' => $failed,
             'errors' => $errors,
         ];
 
-        $this->auditService->close($requestId, $response);
+        $this->auditService->close($requestId, $responsePayload);
 
         if ($this->auditService->shouldLogRecords(self::ENTITY)) {
             $this->auditService->logRecords($requestId, $contractId, self::ENTITY, $recordLogs);
         }
 
-        return $response;
+        $status = ($deleted === 0 && $failed > 0) ? 422 : (($deleted > 0 && $failed > 0) ? 207 : 200);
+
+        return $this->response->json($responsePayload)->withStatus($status);
     }
 
     /**

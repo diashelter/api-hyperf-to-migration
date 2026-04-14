@@ -16,6 +16,8 @@ use App\Controller\Migration\UserMigrationController;
 use App\Service\IdMappingService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use Hyperf\Contract\ValidatorInterface;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\Support\MessageBag;
@@ -42,10 +44,8 @@ final class UserMigrationControllerTest extends UnitTestCase
 
         $controller = $this->createController($request, $insertService);
 
-        $this->assertSame(
-            ['error' => 'Empty batch', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(EmptyBatchException::class);
+        $controller->migrate();
     }
 
     public function testMigrateReturnsErrorWhenBatchExceedsLimit(): void
@@ -61,10 +61,8 @@ final class UserMigrationControllerTest extends UnitTestCase
 
         $controller = $this->createController($request, $insertService);
 
-        $this->assertSame(
-            ['error' => 'Batch size exceeds maximum of 200', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(BatchTooLargeException::class);
+        $controller->migrate();
     }
 
     public function testMigrateHashesPasswordBeforeInserting(): void
@@ -81,7 +79,7 @@ final class UserMigrationControllerTest extends UnitTestCase
         ]];
 
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->once())
             ->method('input')
             ->with('batch', [])
             ->willReturn($batch);
@@ -137,16 +135,18 @@ final class UserMigrationControllerTest extends UnitTestCase
                 'contract-uuid-1'
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, $insertService, $idMappingService, null, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(1, $result['inserted']);
-        $this->assertSame(0, $result['failed']);
-        $this->assertSame([], $result['errors']);
-        $this->assertArrayHasKey('USR-001', $result['id_mappings']);
-        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $result['id_mappings']['USR-001']);
-        $this->assertSame($persistedRecords[0]['id'], $result['id_mappings']['USR-001']);
+        $this->assertSame(1, $capturedPayload['inserted']);
+        $this->assertSame(0, $capturedPayload['failed']);
+        $this->assertSame([], $capturedPayload['errors']);
+        $this->assertArrayHasKey('USR-001', $capturedPayload['id_mappings']);
+        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $capturedPayload['id_mappings']['USR-001']);
+        $this->assertSame($persistedRecords[0]['id'], $capturedPayload['id_mappings']['USR-001']);
     }
 
     public function testMigrateReportsValidationErrorForMissingEmail(): void
@@ -159,7 +159,7 @@ final class UserMigrationControllerTest extends UnitTestCase
         ]];
 
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->once())
             ->method('input')
             ->with('batch', [])
             ->willReturn($batch);
@@ -181,16 +181,18 @@ final class UserMigrationControllerTest extends UnitTestCase
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertSync');
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, $insertService, null, null, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(0, $result['inserted']);
-        $this->assertSame(1, $result['failed']);
-        $this->assertCount(1, $result['errors']);
-        $this->assertSame(0, $result['errors'][0]['index']);
-        $this->assertSame('USR-BAD', $result['errors'][0]['legacy_id']);
-        $this->assertArrayHasKey('email', $result['errors'][0]['validation_errors']);
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['failed']);
+        $this->assertCount(1, $capturedPayload['errors']);
+        $this->assertSame(0, $capturedPayload['errors'][0]['index']);
+        $this->assertSame('USR-BAD', $capturedPayload['errors'][0]['legacy_id']);
+        $this->assertArrayHasKey('email', $capturedPayload['errors'][0]['validation_errors']);
     }
 
     private function createController(

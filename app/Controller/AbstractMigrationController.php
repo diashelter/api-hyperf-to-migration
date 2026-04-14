@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Service\IdMappingService;
 use App\Service\MigrationAuditService;
 use App\Service\MigrationBatchService;
@@ -21,6 +23,7 @@ use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Ramsey\Uuid\Uuid;
 
 use function Hyperf\Support\env;
@@ -115,20 +118,21 @@ abstract class AbstractMigrationController
         return [$validRecords, $validationErrors];
     }
 
-    protected function syncMigrate(): array
+    /**
+     * @throws EmptyBatchException
+     * @throws BatchTooLargeException
+     */
+    protected function syncMigrate(): PsrResponseInterface
     {
         $requestId = Uuid::uuid4()->toString();
         $rawBatch = $this->request->input('batch', []);
 
         if (empty($rawBatch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
+            throw new EmptyBatchException();
         }
 
         if (\count($rawBatch) > $this->getMaxBatchSize()) {
-            return [
-                'error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}",
-                'code' => 422,
-            ];
+            throw new BatchTooLargeException($this->getMaxBatchSize());
         }
 
         $contractId = $this->getContractId();
@@ -159,7 +163,7 @@ abstract class AbstractMigrationController
             $this->idMappingService->storeBatch($entity, $idMappings, $contractId);
         }
 
-        $response = [
+        $payload = [
             'inserted' => $results['inserted'],
             'skipped' => count($skipped),
             'failed' => $results['failed'] + count($validationErrors),
@@ -167,7 +171,7 @@ abstract class AbstractMigrationController
             'id_mappings' => array_replace($existingMappings, $idMappings),
         ];
 
-        $this->auditService?->close($requestId, $response);
+        $this->auditService?->close($requestId, $payload);
 
         if ($this->auditService?->shouldLogRecords($entity) === true) {
             $this->auditService->logRecords(
@@ -182,15 +186,27 @@ abstract class AbstractMigrationController
             );
         }
 
-        return $response;
+        return $this->respond($payload, $this->resolveSyncStatus($payload));
     }
 
-    protected function asyncMigrate(): array
+    /**
+     * @throws EmptyBatchException
+     * @throws BatchTooLargeException
+     */
+    protected function asyncMigrate(): PsrResponseInterface
     {
         $requestId = Uuid::uuid4()->toString();
         $rawBatch = $this->request->input('batch', []);
         $contractId = $this->getContractId();
         $entity = $this->getEntity();
+
+        if (empty($rawBatch)) {
+            throw new EmptyBatchException();
+        }
+
+        if (\count($rawBatch) > $this->getMaxBatchSize()) {
+            throw new BatchTooLargeException($this->getMaxBatchSize());
+        }
 
         if ($this->auditService !== null) {
             $this->auditService->open(
@@ -238,7 +254,9 @@ abstract class AbstractMigrationController
             $allErrors ?: null
         );
 
-        $response = [
+        $statusUrl = "/api/v1/migration/status/{$batchId}";
+
+        $payload = [
             'migration_batch_id' => $batchId,
             'entity' => $entity,
             'total_received' => \count($rawBatch),
@@ -248,10 +266,10 @@ abstract class AbstractMigrationController
             'failed' => $totalFailed,
             'errors' => $allErrors,
             'id_mappings' => array_replace($existingMappings, $idMappings),
-            'status_url' => "/api/v1/migration/status/{$batchId}",
+            'status_url' => $statusUrl,
         ];
 
-        $this->auditService?->close($requestId, $response, $batchId);
+        $this->auditService?->close($requestId, $payload, $batchId);
 
         if ($this->auditService?->shouldLogRecords($entity) === true) {
             $this->auditService->logRecords(
@@ -266,7 +284,8 @@ abstract class AbstractMigrationController
             );
         }
 
-        return $response;
+        return $this->respond($payload, 202)
+            ->withHeader('Location', $statusUrl);
     }
 
     /**
@@ -523,5 +542,41 @@ abstract class AbstractMigrationController
         }
 
         return null;
+    }
+
+    /**
+     * Wraps a payload array into a JSON response with the given HTTP status.
+     */
+    protected function respond(array $payload, int $status): PsrResponseInterface
+    {
+        return $this->response->json($payload)->withStatus($status);
+    }
+
+    /**
+     * Determines the correct HTTP status for a sync migration response:
+     * - 201 Created        — all records inserted (no failures)
+     * - 207 Multi-Status   — partial success (some inserted, some failed)
+     * - 422 Unprocessable  — all records failed validation/insert
+     * - 200 OK             — nothing to insert (all skipped / replay)
+     */
+    private function resolveSyncStatus(array $payload): int
+    {
+        $inserted = (int) ($payload['inserted'] ?? 0);
+        $failed = (int) ($payload['failed'] ?? 0);
+
+        if ($inserted > 0 && $failed === 0) {
+            return 201;
+        }
+
+        if ($inserted > 0 && $failed > 0) {
+            return 207;
+        }
+
+        if ($inserted === 0 && $failed > 0) {
+            return 422;
+        }
+
+        // inserted === 0 && failed === 0 → idempotent replay (all skipped)
+        return 200;
     }
 }

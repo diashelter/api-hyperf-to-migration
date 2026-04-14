@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\CompanyMigrationController;
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Service\IdMappingService;
 use App\Service\MigrationBatchService;
 use App\Service\ParallelInsertService;
@@ -28,13 +30,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 #[CoversClass(CompanyMigrationController::class)]
 final class CompanyMigrationControllerTest extends UnitTestCase
 {
-    public function testMigrateReturnsValidationErrorWhenBatchIsEmpty(): void
+    public function testMigrateThrowsEmptyBatchException(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->once())
-            ->method('input')
-            ->with('batch', [])
-            ->willReturn([]);
+        $request->method('input')->with('batch', [])->willReturn([]);
 
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertSync');
@@ -46,19 +45,14 @@ final class CompanyMigrationControllerTest extends UnitTestCase
             $this->createStub(MigrationBatchService::class)
         );
 
-        $this->assertSame(
-            ['error' => 'Empty batch', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(EmptyBatchException::class);
+        $controller->migrate();
     }
 
-    public function testMigrateReturnsValidationErrorWhenBatchExceedsLimit(): void
+    public function testMigrateThrowsBatchTooLargeException(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->once())
-            ->method('input')
-            ->with('batch', [])
-            ->willReturn(array_fill(0, 101, ['name' => 'Company']));
+        $request->method('input')->with('batch', [])->willReturn(array_fill(0, 101, ['name' => 'Company']));
 
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertSync');
@@ -70,10 +64,8 @@ final class CompanyMigrationControllerTest extends UnitTestCase
             $this->createStub(MigrationBatchService::class)
         );
 
-        $this->assertSame(
-            ['error' => 'Batch size exceeds maximum of 100', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(BatchTooLargeException::class);
+        $controller->migrate();
     }
 
     public function testMigrateTransformsAndPersistsSyncBatch(): void
@@ -87,7 +79,7 @@ final class CompanyMigrationControllerTest extends UnitTestCase
         ]];
 
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->once())
             ->method('input')
             ->with('batch', [])
             ->willReturn($batch);
@@ -164,36 +156,43 @@ final class CompanyMigrationControllerTest extends UnitTestCase
             ->method('make')
             ->willReturn($validator);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
+
         $controller = $this->createController(
             $request,
             $insertService,
             $idMappingService,
             $this->createStub(MigrationBatchService::class),
-            $validatorFactory
+            $validatorFactory,
+            $responseMock
         );
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(1, $result['inserted']);
-        $this->assertSame(0, $result['failed']);
-        $this->assertSame([], $result['errors']);
-        $this->assertSame(['legacy-company-1' => $generatedId], $result['id_mappings']);
+        $this->assertSame(1, $capturedPayload['inserted']);
+        $this->assertSame(0, $capturedPayload['failed']);
+        $this->assertSame([], $capturedPayload['errors']);
+        $this->assertSame(['legacy-company-1' => $generatedId], $capturedPayload['id_mappings']);
         $this->assertSame($generatedId, $persistedRecords[0]['id']);
     }
 
     private function createController(
         RequestInterface $request,
         ParallelInsertService $insertService,
-        IdMappingService $idMappingService,
-        MigrationBatchService $batchService,
-        ?ValidatorFactoryInterface $validatorFactory = null
+        ?IdMappingService $idMappingService = null,
+        ?MigrationBatchService $batchService = null,
+        ?ValidatorFactoryInterface $validatorFactory = null,
+        mixed $responseMock = null
     ): CompanyMigrationController {
         $controller = new CompanyMigrationController();
         $this->injectProperty($controller, 'request', $request);
         $this->injectProperty($controller, 'insertService', $insertService);
-        $this->injectProperty($controller, 'idMappingService', $idMappingService);
-        $this->injectProperty($controller, 'batchService', $batchService);
+        $this->injectProperty($controller, 'idMappingService', $idMappingService ?? $this->createStub(IdMappingService::class));
+        $this->injectProperty($controller, 'batchService', $batchService ?? $this->createStub(MigrationBatchService::class));
         $this->injectProperty($controller, 'validatorFactory', $validatorFactory ?? $this->createStub(ValidatorFactoryInterface::class));
+        if ($responseMock !== null) {
+            $this->injectProperty($controller, 'response', $responseMock);
+        }
 
         return $controller;
     }

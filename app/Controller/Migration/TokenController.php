@@ -12,13 +12,16 @@ declare(strict_types=1);
 
 namespace App\Controller\Migration;
 
+use App\Exception\UnauthorizedException;
 use App\Service\TokenService;
 use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\HttpServer\Contract\RequestInterface;
+use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 
 use function Hyperf\Support\env;
 
@@ -28,6 +31,9 @@ class TokenController
 {
     #[Inject]
     protected RequestInterface $request;
+
+    #[Inject]
+    protected ResponseInterface $response;
 
     #[Inject]
     protected TokenService $tokenService;
@@ -42,36 +48,28 @@ class TokenController
             content: new OA\JsonContent(ref: '#/components/schemas/TokenRequest')
         ),
         responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Token gerado com sucesso',
-                content: new OA\JsonContent(ref: '#/components/schemas/TokenResponse')
-            ),
-            new OA\Response(
-                response: 401,
-                description: 'Secret inválido',
-                content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')
-            ),
+            new OA\Response(response: 200, description: 'Token gerado com sucesso', content: new OA\JsonContent(ref: '#/components/schemas/TokenResponse')),
+            new OA\Response(response: 401, description: 'Secret inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[PostMapping(path: 'token')]
-    public function generate(): array
+    public function generate(): PsrResponseInterface
     {
         $userId = $this->request->input('user_id', '');
         $contractId = $this->request->input('contract_id');
         $secret = $this->request->input('secret', '');
 
-        // Simple secret validation (in production, validate against DB)
         if ($secret !== env('JWT_SECRET', '')) {
-            return ['error' => 'Invalid secret', 'code' => 401];
+            throw new UnauthorizedException('Invalid secret.');
         }
 
         $token = $this->tokenService->generate($userId, $contractId);
 
-        return [
+        return $this->response->json([
             'token' => $token,
             'type' => 'Bearer',
             'expires_in' => (int) env('JWT_TTL', 86400),
-        ];
+        ]);
     }
 }

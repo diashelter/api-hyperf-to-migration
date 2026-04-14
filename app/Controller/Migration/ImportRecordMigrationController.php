@@ -21,6 +21,7 @@ use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Ramsey\Uuid\Uuid;
 
 #[Controller(prefix: '/api/v1/migration')]
@@ -81,46 +82,23 @@ DESC,
             )
         ),
         responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Migração processada',
-                content: new OA\JsonContent(
-                    ref: '#/components/schemas/AsyncMigrationResponse',
-                    example: [
-                        'migration_batch_id' => '770e8400-e29b-41d4-a716-446655440002',
-                        'entity' => 'import_records',
-                        'total_received' => 1,
-                        'status' => 'completed',
-                        'inserted' => 1,
-                        'failed' => 0,
-                        'errors' => null,
-                        'id_mappings' => ['IR-0001' => 'kkk11111-0000-0000-0000-000000000001'],
-                        'status_url' => '/api/v1/migration/status/770e8400-e29b-41d4-a716-446655440002',
-                    ]
-                )
-            ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 202, description: 'Batch aceito para processamento assíncrono', content: new OA\JsonContent(ref: '#/components/schemas/AsyncMigrationResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 413, description: 'Batch excede o limite máximo', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[PostMapping(path: 'import-records')]
-    public function migrate(): array
+    public function migrate(): PsrResponseInterface
     {
         $batch = $this->request->input('batch', []);
         $finalize = (bool) $this->request->input('finalize', false);
 
-        if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
-        }
-
-        if (\count($batch) > $this->getMaxBatchSize()) {
-            return ['error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}", 'code' => 422];
-        }
-
         $result = $this->asyncMigrate();
 
-        if ($finalize && empty($result['error'])) {
+        if ($finalize) {
             $this->finalizeImportSessions($batch);
         }
 

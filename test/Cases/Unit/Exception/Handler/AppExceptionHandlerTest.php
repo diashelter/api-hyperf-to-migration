@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Unit\Exception\Handler;
 
+use App\Exception\ApiException;
 use App\Exception\Handler\AppExceptionHandler;
 use Hyperf\Contract\StdoutLoggerInterface;
 use Hyperf\HttpMessage\Stream\SwooleStream;
@@ -27,7 +28,7 @@ use Throwable;
 #[CoversClass(AppExceptionHandler::class)]
 final class AppExceptionHandlerTest extends UnitTestCase
 {
-    public function testHandleLogsTheExceptionAndReturnsInternalServerErrorResponse(): void
+    public function testHandleLogsAndReturns500ForGenericException(): void
     {
         $exception = new RuntimeException('Boom');
         $logger = $this->createMock(StdoutLoggerInterface::class);
@@ -42,7 +43,7 @@ final class AppExceptionHandlerTest extends UnitTestCase
 
         $response->expects($this->once())
             ->method('withHeader')
-            ->with('Server', 'Hyperf')
+            ->with('Content-Type', 'application/problem+json')
             ->willReturnSelf();
         $response->expects($this->once())
             ->method('withStatus')
@@ -51,7 +52,10 @@ final class AppExceptionHandlerTest extends UnitTestCase
         $response->expects($this->once())
             ->method('withBody')
             ->with($this->callback(function (SwooleStream $stream): bool {
-                return $stream->getContents() === 'Internal Server Error.';
+                $decoded = json_decode($stream->getContents(), true);
+                return isset($decoded['type'], $decoded['title'], $decoded['status'], $decoded['detail'])
+                    && $decoded['status'] === 500
+                    && $decoded['title'] === 'Internal Server Error';
             }))
             ->willReturnSelf();
 
@@ -59,6 +63,29 @@ final class AppExceptionHandlerTest extends UnitTestCase
         $result = $handler->handle($exception, $response);
 
         $this->assertSame($response, $result);
+    }
+
+    public function testHandleReturnsApiExceptionStatusAndBody(): void
+    {
+        $exception = new ApiException('Record not found.', 404, 'Not Found');
+        $logger = $this->createMock(StdoutLoggerInterface::class);
+        $logger->method('error');
+
+        $response = $this->createMock(ResponseInterface::class);
+        $response->expects($this->once())->method('withHeader')->with('Content-Type', 'application/problem+json')->willReturnSelf();
+        $response->expects($this->once())->method('withStatus')->with(404)->willReturnSelf();
+        $response->expects($this->once())
+            ->method('withBody')
+            ->with($this->callback(function (SwooleStream $stream): bool {
+                $decoded = json_decode($stream->getContents(), true);
+                return $decoded['status'] === 404
+                    && $decoded['title'] === 'Not Found'
+                    && $decoded['detail'] === 'Record not found.';
+            }))
+            ->willReturnSelf();
+
+        $handler = new AppExceptionHandler($logger);
+        $handler->handle($exception, $response);
     }
 
     public function testIsValidAlwaysReturnsTrue(): void

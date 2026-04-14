@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace App\Controller\Migration;
 
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
 use App\Service\IdMappingService;
@@ -27,6 +29,7 @@ use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Ramsey\Uuid\Uuid;
 use Throwable;
 
@@ -102,36 +105,28 @@ class ContractUserMigrationController
             )
         ),
         responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Migração concluída',
-                content: new OA\JsonContent(
-                    ref: '#/components/schemas/SyncMigrationResponse',
-                    example: [
-                        'inserted' => 2,
-                        'failed' => 0,
-                        'errors' => [],
-                        'id_mappings' => [],
-                    ]
-                )
-            ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 200, description: 'Replay idempotente (todos os registros já existiam)', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 201, description: 'Migração concluída com sucesso', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 207, description: 'Migração parcial — alguns registros falharam', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 413, description: 'Batch excede o limite máximo', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio ou todos os registros falharam', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[PostMapping(path: 'contract-users')]
-    public function migrate(): array
+    public function migrate(): PsrResponseInterface
     {
         $requestId = Uuid::uuid4()->toString();
         $batch = $this->request->input('batch', []);
 
         if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
+            throw new EmptyBatchException();
         }
 
         if (\count($batch) > self::MAX_BATCH_SIZE) {
-            return ['error' => 'Batch size exceeds maximum of ' . self::MAX_BATCH_SIZE, 'code' => 422];
+            throw new BatchTooLargeException(self::MAX_BATCH_SIZE);
         }
 
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
@@ -237,7 +232,7 @@ class ContractUserMigrationController
             }
         }
 
-        $response = [
+        $responsePayload = [
             'inserted' => $inserted,
             'skipped' => $skipped,
             'failed' => $failed + \count($validationErrors),
@@ -245,13 +240,33 @@ class ContractUserMigrationController
             'id_mappings' => [],
         ];
 
-        $this->auditService->close($requestId, $response);
+        $this->auditService->close($requestId, $responsePayload);
 
         if ($this->auditService->shouldLogRecords(self::ENTITY)) {
             $this->auditService->logRecords($requestId, $contractId, self::ENTITY, $recordLogs);
         }
 
-        return $response;
+        return $this->response->json($responsePayload)->withStatus($this->resolveSyncStatus($responsePayload));
+    }
+
+    private function resolveSyncStatus(array $payload): int
+    {
+        $inserted = (int) ($payload['inserted'] ?? 0);
+        $failed = (int) ($payload['failed'] ?? 0);
+
+        if ($inserted > 0 && $failed === 0) {
+            return 201;
+        }
+
+        if ($inserted > 0 && $failed > 0) {
+            return 207;
+        }
+
+        if ($inserted === 0 && $failed > 0) {
+            return 422;
+        }
+
+        return 200;
     }
 
     private function getRequestIpAddress(): ?string

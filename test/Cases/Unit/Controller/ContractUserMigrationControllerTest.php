@@ -16,6 +16,8 @@ use App\Controller\Migration\ContractUserMigrationController;
 use App\Service\IdMappingService;
 use App\Service\LookupCacheService;
 use App\Service\MigrationAuditService;
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use Hyperf\Contract\ValidatorInterface;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\Support\MessageBag;
@@ -44,10 +46,8 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
 
         $controller = $this->createController($request);
 
-        $this->assertSame(
-            ['error' => 'Empty batch', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(EmptyBatchException::class);
+        $controller->migrate();
     }
 
     public function testMigrateReturnsErrorWhenBatchExceedsLimit(): void
@@ -60,10 +60,8 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
 
         $controller = $this->createController($request);
 
-        $this->assertSame(
-            ['error' => 'Batch size exceeds maximum of 500', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(BatchTooLargeException::class);
+        $controller->migrate();
     }
 
     public function testMigrateResolvesLegacyFKsAndPassesResolvedUuidsToValidator(): void
@@ -138,13 +136,15 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
             )
             ->willReturn($validator);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, $idMappingService, $lookupCacheService, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
         // Record failed validation (by design), but FK resolution was verified above
-        $this->assertSame(0, $result['inserted']);
-        $this->assertSame(1, $result['failed']);
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['failed']);
     }
 
     public function testMigrateReportsValidationErrorWhenLegacyIdsDoNotResolve(): void
@@ -184,18 +184,20 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
         $validatorFactory = $this->createMock(ValidatorFactoryInterface::class);
         $validatorFactory->method('make')->willReturn($validator);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, $idMappingService, $lookupCacheService, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(0, $result['inserted']);
-        $this->assertSame(1, $result['failed']);
-        $this->assertCount(1, $result['errors']);
-        $this->assertSame(0, $result['errors'][0]['index']);
-        $this->assertNull($result['errors'][0]['legacy_id']);
-        $this->assertArrayHasKey('user_id', $result['errors'][0]['validation_errors']);
-        $this->assertArrayHasKey('contract_id', $result['errors'][0]['validation_errors']);
-        $this->assertArrayHasKey('role_id', $result['errors'][0]['validation_errors']);
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['failed']);
+        $this->assertCount(1, $capturedPayload['errors']);
+        $this->assertSame(0, $capturedPayload['errors'][0]['index']);
+        $this->assertNull($capturedPayload['errors'][0]['legacy_id']);
+        $this->assertArrayHasKey('user_id', $capturedPayload['errors'][0]['validation_errors']);
+        $this->assertArrayHasKey('contract_id', $capturedPayload['errors'][0]['validation_errors']);
+        $this->assertArrayHasKey('role_id', $capturedPayload['errors'][0]['validation_errors']);
     }
 
     public function testMigrateStripsMetaFieldsFromPivotRecordBeforeValidation(): void
@@ -244,12 +246,14 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
             )
             ->willReturn($validator);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, null, null, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(0, $result['inserted']);
-        $this->assertSame(1, $result['failed']);
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['failed']);
     }
 
     public function testMigrateUsesInsertOrIgnoreForDuplicatePivotRowsAndAuditsRequest(): void
@@ -385,6 +389,7 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
                 })
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController(
             $request,
             $idMappingService,
@@ -392,14 +397,15 @@ final class ContractUserMigrationControllerTest extends UnitTestCase
             $validatorFactory,
             $auditService
         );
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(1, $result['inserted']);
-        $this->assertSame(1, $result['skipped']);
-        $this->assertSame(0, $result['failed']);
-        $this->assertSame([], $result['errors']);
-        $this->assertSame([], $result['id_mappings']);
+        $this->assertSame(1, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['skipped']);
+        $this->assertSame(0, $capturedPayload['failed']);
+        $this->assertSame([], $capturedPayload['errors']);
+        $this->assertSame([], $capturedPayload['id_mappings']);
     }
 
     private function createController(

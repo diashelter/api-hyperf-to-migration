@@ -15,15 +15,49 @@ namespace App\Swagger;
 use OpenApi\Attributes as OA;
 
 #[OA\Info(
-    version: '1.0.0',
+    version: '1.1.0',
     title: 'Conciliador Migrator API',
     description: <<<'DESC'
 API de migração de dados do sistema legado para o Conciliador Web.
+Segue o **Richardson Maturity Level 2** — recursos, verbos HTTP corretos e status codes semânticos.
+Erros retornam **RFC 7807 Problem Details** (`Content-Type: application/problem+json`).
 
 ## Visão Geral
 - Suporta inserção em lote (batch) com mapeamento automático de IDs legados para UUIDs
 - **Sync**: Inserção direta via `DB::transaction()` — ideal para dados de referência (< 10K registros)
 - **Async**: Processamento paralelo via coroutines Swoole — ideal para alto volume (1M+ registros)
+
+## Status Codes
+
+### Sucesso
+| Código | Semântica | Quando ocorre |
+|--------|-----------|---------------|
+| `200 OK` | Replay idempotente | Todos os registros já existiam (batch duplicado) |
+| `201 Created` | Inserção total | Todos os registros inseridos sem falhas |
+| `202 Accepted` | Async aceito | Batch assíncrono aceito; use `status_url` / header `Location` para acompanhar |
+| `207 Multi-Status` | Parcial | Alguns registros inseridos, outros falharam |
+
+### Erro (corpo RFC 7807)
+| Código | Semântica |
+|--------|-----------|
+| `401 Unauthorized` | Token ausente ou inválido |
+| `403 Forbidden` | Token válido mas sem permissão ao contrato |
+| `404 Not Found` | Recurso (ex: batch) não encontrado |
+| `413 Content Too Large` | Batch excede o limite máximo |
+| `422 Unprocessable Entity` | Batch vazio ou todos os registros falharam na validação |
+| `429 Too Many Requests` | Rate limit excedido |
+| `500 Internal Server Error` | Erro inesperado no servidor |
+
+## Envelope de Erro (RFC 7807)
+```json
+{
+  "type": "about:blank",
+  "title": "Unprocessable Entity",
+  "status": 422,
+  "detail": "The 'batch' field is required and must not be empty.",
+  "errors": []
+}
+```
 
 ## Ordem de Migração (respeitar dependências FK)
 1. `contracts` — sem dependências (raiz do tenant)

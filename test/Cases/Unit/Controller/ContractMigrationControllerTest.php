@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\ContractMigrationController;
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Service\IdMappingService;
 use App\Service\MigrationAuditService;
 use App\Service\MigrationBatchService;
@@ -43,10 +45,8 @@ final class ContractMigrationControllerTest extends UnitTestCase
 
         $controller = $this->createController($request, $insertService);
 
-        $this->assertSame(
-            ['error' => 'Empty batch', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(EmptyBatchException::class);
+        $controller->migrate();
     }
 
     public function testMigrateReturnsErrorWhenBatchExceedsLimit(): void
@@ -62,10 +62,8 @@ final class ContractMigrationControllerTest extends UnitTestCase
 
         $controller = $this->createController($request, $insertService);
 
-        $this->assertSame(
-            ['error' => 'Batch size exceeds maximum of 100', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(BatchTooLargeException::class);
+        $controller->migrate();
     }
 
     public function testMigrateTransformsAndPersistsValidBatch(): void
@@ -82,7 +80,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
         ]];
 
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->once())
             ->method('input')
             ->with('batch', [])
             ->willReturn($batch);
@@ -144,16 +142,18 @@ final class ContractMigrationControllerTest extends UnitTestCase
                 'contract-uuid-1'
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, $insertService, $idMappingService, null, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(1, $result['inserted']);
-        $this->assertSame(0, $result['failed']);
-        $this->assertSame([], $result['errors']);
-        $this->assertArrayHasKey('LEG-001', $result['id_mappings']);
-        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $result['id_mappings']['LEG-001']);
-        $this->assertSame($persistedRecords[0]['id'], $result['id_mappings']['LEG-001']);
+        $this->assertSame(1, $capturedPayload['inserted']);
+        $this->assertSame(0, $capturedPayload['failed']);
+        $this->assertSame([], $capturedPayload['errors']);
+        $this->assertArrayHasKey('LEG-001', $capturedPayload['id_mappings']);
+        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $capturedPayload['id_mappings']['LEG-001']);
+        $this->assertSame($persistedRecords[0]['id'], $capturedPayload['id_mappings']['LEG-001']);
     }
 
     public function testMigrateReportsValidationErrorForInvalidRecord(): void
@@ -165,7 +165,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
         ]];
 
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->once())
             ->method('input')
             ->with('batch', [])
             ->willReturn($batch);
@@ -190,16 +190,18 @@ final class ContractMigrationControllerTest extends UnitTestCase
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertSync');
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, $insertService, null, null, $validatorFactory);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(0, $result['inserted']);
-        $this->assertSame(1, $result['failed']);
-        $this->assertCount(1, $result['errors']);
-        $this->assertSame(0, $result['errors'][0]['index']);
-        $this->assertSame('LEG-BAD', $result['errors'][0]['legacy_id']);
-        $this->assertArrayHasKey('cpf_cnpj', $result['errors'][0]['validation_errors']);
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['failed']);
+        $this->assertCount(1, $capturedPayload['errors']);
+        $this->assertSame(0, $capturedPayload['errors'][0]['index']);
+        $this->assertSame('LEG-BAD', $capturedPayload['errors'][0]['legacy_id']);
+        $this->assertArrayHasKey('cpf_cnpj', $capturedPayload['errors'][0]['validation_errors']);
     }
 
     public function testMigrateSkipsExistingMappingsAndAuditsSyncRequest(): void
@@ -226,7 +228,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
         ];
 
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->once())
             ->method('input')
             ->with('batch', [])
             ->willReturn($rawBatch);
@@ -350,6 +352,7 @@ final class ContractMigrationControllerTest extends UnitTestCase
                 })
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController(
             $request,
             $insertService,
@@ -358,17 +361,18 @@ final class ContractMigrationControllerTest extends UnitTestCase
             $validatorFactory,
             $auditService
         );
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(1, $result['inserted']);
-        $this->assertSame(1, $result['skipped']);
-        $this->assertSame(0, $result['failed']);
-        $this->assertSame([], $result['errors']);
+        $this->assertSame(1, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['skipped']);
+        $this->assertSame(0, $capturedPayload['failed']);
+        $this->assertSame([], $capturedPayload['errors']);
         $this->assertSame([
             'LEG-EXIST' => 'existing-uuid-1',
             'LEG-NEW' => $generatedId,
-        ], $result['id_mappings']);
+        ], $capturedPayload['id_mappings']);
         $this->assertCount(1, $persistedRecords);
     }
 
