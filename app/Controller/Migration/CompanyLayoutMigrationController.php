@@ -112,18 +112,6 @@ class CompanyLayoutMigrationController extends AbstractMigrationController
             'credit_account' => 'nullable|string|max:20',
             'debit_account' => 'nullable|string|max:20',
             'account_fixed' => 'nullable|boolean',
-            'bank' => 'nullable|string|max:50',
-            'value_debit' => 'nullable|string|max:50',
-            'value_code_history_debit' => 'nullable|string|max:50',
-            'value_history_debit' => 'nullable|string|max:50',
-            'fees_debit' => 'nullable|string|max:50',
-            'fees_code_history_debit' => 'nullable|string|max:50',
-            'fees_history_debit' => 'nullable|string|max:50',
-            'fine_debit' => 'nullable|string|max:50',
-            'discount_debit' => 'nullable|string|max:50',
-            'others_debit' => 'nullable|string|max:50',
-            'refunds_debit' => 'nullable|string|max:50',
-            'rates_debit' => 'nullable|string|max:50',
         ];
     }
 
