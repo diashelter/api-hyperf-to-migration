@@ -27,6 +27,37 @@ use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 #[HyperfServer('http')]
 class ImportMigrationController extends AbstractMigrationController
 {
+    protected function getTable(): string
+    {
+        return 'imports';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'imports';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 300;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'name'             => 'nullable|string|max:255',
+            'total_files'      => 'required|integer|min:1',
+            'initial_period'   => 'nullable|date',
+            'final_period'     => 'nullable|date',
+            'previous_balance' => 'nullable|numeric',
+        ];
+    }
+
     #[OA\Post(
         path: '/api/v1/migration/imports',
         summary: 'Migrar importações',
@@ -71,37 +102,6 @@ class ImportMigrationController extends AbstractMigrationController
     public function migrate(): PsrResponseInterface
     {
         return $this->syncMigrate();
-    }
-
-    protected function getTable(): string
-    {
-        return 'imports';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'imports';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 100;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'name' => 'required|string|max:255',
-            'total_files' => 'required|integer|min:1',
-            'initial_period' => 'nullable|date',
-            'final_period' => 'nullable|date',
-            'previous_balance' => 'nullable|numeric',
-        ];
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

@@ -136,6 +136,48 @@ class RuleMigrationController extends AbstractMigrationController
             unset($record['legacy_layout_id']);
         }
 
-        return $this->resolveContractIdFK($record, $contractId);
+        $record = $this->resolveContractIdFK($record, $contractId);
+
+        $record['token'] = $this->parseTokenToWeb($record['token'], $record['layout_id'] ?? null);
+        $record['cpf_cnpj'] = $record['cpf_cnpj'] ? str_replace(['field_cpfcnpj'], 'field_cpf_cnpj', $record['cpf_cnpj'] ) : "NULLIF(#field_cpf_cnpj#,'') IS NULL";
+        $record['client_supplier'] = $record['client_supplier'] ? str_replace(['field_clifor'], 'field_client_supplier', $record['client_supplier'] ) : "NULLIF(#field_client_supplier#,'') IS NULL";
+        $record['history'] = $record['history'] ? str_replace(['fnc_semelhante'], 'fnc_similar', $record['history'] ) : "NULLIF(#field_history#,'') IS NULL";
+        $record['history'] = $record['history'] ? str_replace(['field_historico'], 'field_history', $record['history'] ) : "NULLIF(#field_history#,'') IS NULL";
+        $record['bank'] = $record['bank'] ? str_replace(['field_banco'], 'field_bank', $record['bank'] ) : "NULLIF(#field_bank#,'') IS NULL";
+        $record['filial'] = $record['filial'] ? str_replace(['field_filial'], 'field_filial', $record['filial'] ) : "NULLIF(#field_filial#,'') IS NULL";
+        $record['additional_information'] = $record['additional_information'] ? str_replace(['field_infadicional'], 'field_additional_information', $record['additional_information'] ) : "NULLIF(#field_additional_information#,'') IS NULL";
+        $record['additional_information_3'] = $record['additional_information_3'] ? str_replace(['field_infadicional_compl'], 'field_additional_information_3', $record['additional_information_3'] ) : "NULLIF(#field_additional_information_3#,'') IS NULL";
+
+        return $record;
+    }
+
+    private function parseTokenToWeb(string $legacyToken, $layout_id): string
+    {
+        // Conversão de token legado para formato do sistema web
+        // token de (11,1,0,1,1,0,0,0,0) para (a144e3c6-72e8-43a4-b5da-840ca3b55393,t,f,f,t,t,f,f,f,f,f)
+
+        if (empty($legacyToken)) {
+            return '';
+        }
+        // remover parentesses
+        $removed = str_replace(['(', ')'], '', $legacyToken);
+        // separar por vírgula
+        $parts = explode(',', $removed);
+        // mapear para o formato web
+        $webToken = sprintf(
+            '(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+            $layout_id,
+            $parts[1] === '0' ? 'f' : 't',
+            $parts[2] === '0' ? 'f' : 't',
+            $parts[3] === '0' ? 'f' : 't',
+            $parts[4] === '0' ? 'f' : 't',
+            $parts[5] === '0' ? 'f' : 't',
+            $parts[6] === '0' ? 'f' : 't',
+            $parts[7] === '0' ? 'f' : 't',
+            'f',
+            $parts[8] === '0' ? 'f' : 't',
+            'f'
+        );
+        return $webToken;
     }
 }

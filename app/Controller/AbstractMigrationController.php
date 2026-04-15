@@ -369,17 +369,18 @@ abstract class AbstractMigrationController
             if ($normalizeStrings) {
                 foreach (array_keys($record) as $field) {
                     if (
-                        $field === 'password'
-                        || $field === 'contractor_type'
-                        || $field === 'tax_regime'
-                        || $field === 'format'
-                        || $field === 'movement_type'
-                        || $field === 'sector'
-                        || $field === 'origin'
-                        || $field === 'debit_credit'
-                        || $field === 'records_origin'
-                        || str_ends_with($field, '_id')
-                        || ! is_string($record[$field])
+                        $field === 'password' ||
+                        $field === 'contractor_type' ||
+                        $field === 'tax_regime' ||
+                        $field === 'format' ||
+                        $field === 'movement_type' ||
+                        $field === 'sector' ||
+                        $field === 'origin' ||
+                        $field === 'debit_credit' ||
+                        $field === 'records_origin' ||
+                        str_ends_with($field, '_id') ||
+                        ! is_string($record[$field])
+                        || $field === 'status'
                     ) {
                         continue;
                     }

@@ -27,6 +27,38 @@ use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 #[HyperfServer('http')]
 class ImportSessionMigrationController extends AbstractMigrationController
 {
+    protected function getTable(): string
+    {
+        return 'import_sessions';
+    }
+
+    protected function getEntity(): string
+    {
+        return 'import_sessions';
+    }
+
+    protected function getMaxBatchSize(): int
+    {
+        return 300;
+    }
+
+    protected function getConnection(): string
+    {
+        return 'conciliador_web';
+    }
+
+    protected function validationRules(): array
+    {
+        return [
+            'legacy_layout_id'   => 'required|integer',
+            'legacy_import_id'   => 'nullable|string',
+            'original_file_name' => 'required|string|max:255',
+            'file_name' => 'required|string',
+            'date_to_create' => 'nullable|string',
+            'size' => 'nullable|integer',
+        ];
+    }
+
     #[OA\Post(
         path: '/api/v1/migration/import-sessions',
         summary: 'Migrar sessões de importação',
@@ -70,36 +102,6 @@ class ImportSessionMigrationController extends AbstractMigrationController
         return $this->syncMigrate();
     }
 
-    protected function getTable(): string
-    {
-        return 'import_sessions';
-    }
-
-    protected function getEntity(): string
-    {
-        return 'import_sessions';
-    }
-
-    protected function getMaxBatchSize(): int
-    {
-        return 200;
-    }
-
-    protected function getConnection(): string
-    {
-        return 'conciliador_web';
-    }
-
-    protected function validationRules(): array
-    {
-        return [
-            'original_file_name' => 'required|string|max:255',
-            'file_name' => 'required|string',
-            'date_to_create' => 'nullable|string',
-            'size' => 'nullable|integer',
-        ];
-    }
-
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_import_id'])) {
@@ -111,7 +113,7 @@ class ImportSessionMigrationController extends AbstractMigrationController
             $record['layout_id'] = $this->idMappingService->resolve('layouts', $record['legacy_layout_id'], $contractId) ?? $record['layout_id'] ?? null;
             unset($record['legacy_layout_id']);
         }
-
+        $record['file_name'] = '';
         return $record;
     }
 }

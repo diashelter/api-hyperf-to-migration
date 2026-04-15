@@ -141,6 +141,7 @@ SELECT
 SELECT distinct
     -- Identidade
     layout.pk                                 AS code,
+    layout.pk                                 AS legacy_id,
     nome                               AS name,
     CASE setor
 	 	WHEN 'C' THEN 'Contábil' ELSE 'Fiscal' END AS sector,
@@ -353,7 +354,6 @@ FROM public.layout
 WHERE visivel = 1
 AND tipo = 'IMP'
 ORDER BY layout.pk
-LIMIT
 </code>
 
 ### Emprea
@@ -426,7 +426,7 @@ FROM pessoas
 </code>
 
 ### Pessoa Vinculos
-<code></code>
+<code>{{base_url}}/api/v1/migration/people-vinculated</code>
 
 #### Query
 <code>
@@ -442,7 +442,9 @@ FROM pessoas_vinculo
 </code>
 
 ### Imports
-<code></code>
+<code>{{base_url}}/api/v1/migration/imports</code>
+
+BATCH SIZE 300
 
 #### Query
 <code>
@@ -451,8 +453,7 @@ SELECT
     (
         SELECT pk 
         FROM usuarios 
-        WHERE administrador = 1 
-          AND pk <> 1 
+        WHERE administrador = 1 AND pk <> 1 
         LIMIT 1
     ) AS legacy_user_id,
     importacao.fk_empresa as legacy_company_id,
@@ -460,10 +461,121 @@ SELECT
     CURRENT_DATABASE() AS legacy_contract_id,
     fk_layoutempresa AS legacy_company_layout_id,
     layout_empresa.saldo_anterior AS previous_balance,
-        COUNT(fk_layoutempresa) > 10000 AS is_big_import,
+	 COUNT(fk_layoutempresa) > 10000 AS is_big_import,
     1 AS total_files
 FROM importacao
-	JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa 
-GROUP BY  importacao.fk_empresa, fk_layoutempresa, layout_empresa.saldo_anterior
+	JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
+WHERE fk_layout <> 0
+GROUP BY importacao.fk_empresa, fk_layoutempresa, layout_empresa.saldo_anterior
+ORDER BY fk_layoutempresa
 </code>   
 
+### Imports Sessions
+<code>{{base_url}}/api/v1/migration/import-sessions</code>
+
+BATCH SIZE 300
+
+#### Query
+<code>
+SELECT distinct
+   'IS-' || fk_layoutempresa AS legacy_id,
+   fk_layout AS legacy_layout_id,
+   'IMP-' || fk_layoutempresa as legacy_import_id
+FROM importacao
+	JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
+WHERE fk_layout <> 0
+</code>
+
+### Regras (async)
+<code>{{base_url}}/api/v1/migration/rules</code>
+
+BATCH SIZE 2000
+
+#### Query
+<code>
+SELECT 
+	 regras.id AS legacy_id,
+	 layout_empresa.fk_empresa AS legacy_company_id,
+	 layout_empresa.fk_layoutimp AS legacy_layout_id,
+	 cd AS debit_credit,
+	 cpfcnpj AS cpf_cnpj,
+	 clifor AS client_supplier,
+	 historico AS history,
+	 banco AS bank,
+	 filial AS filial,
+	 infadicional AS additional_information,
+	 infadicional_compl AS additional_information_3,
+	 token AS token,
+	 exclusivo AS "exclusive",
+	 idhistorico AS id_history,
+	 iddebito AS id_debit,
+	 idcredito AS id_credit,
+	 historicoexp AS id_history_exp,
+	 idcccredito AS id_cc_credit,
+	 idccdebito AS id_cc_debit,
+	 reprocessar AS reprocess,
+	 invalida AS invalid,
+	 ROW_NUMBER() OVER (
+            PARTITION BY fk_layoutimp
+            ORDER BY fk_layoutimp
+    ) AS sort_order,
+	 historico_imp AS history_value,
+	 cpfcnpj_imp AS cpf_cnpj_value,
+	 clifor_imp as client_supplier_value,
+	 banco_imp as bank_value,
+	 filial_imp as filial_value,
+	 infadicional_imp as additional_information_value,
+	 infadicional_compl_imp as additional_information_3_value,
+	 idparticipante AS third_party_participant
+FROM regras
+	JOIN layout_empresa ON regras.fk_layout_empresa = layout_empresa.pk
+WHERE fk_layoutimp <> 0
+
+</code>
+
+### Imports Records
+<code>{{base_url}}/api/v1/migration/import-sessions</code>
+
+BATCH SIZE 2000
+
+#### Query
+<code>
+SELECT
+	ip.pk AS legacy_id,
+   'IS-' || fk_layoutempresa AS legacy_import_session_id,
+   'IMP-' || fk_layoutempresa as legacy_import_id,
+   numdocumento as num_doc,
+   "data" AS "date",
+   historico AS history,
+   valor AS "value",
+   fornecedor AS client_supplier,
+   cd AS debit_credit,
+   banco AS bank,
+   con_idparticipante AS third_party_participant,
+   ip.infadicional AS additional_information,
+   ip.complemento AS complement,
+   ip.con_iddebito AS debit_account,
+   ip.con_idcredito AS credit_account,
+   ip.filial AS filial,
+   ip.parcela AS parcel,
+   ip.historicoexp AS accounting_history,
+   ip.cpfcnpj_forn AS cpf_cnpj,
+   ip.infadicional3 AS additional_information_3,
+   ROW_NUMBER() OVER (
+            PARTITION BY fk_layoutempresa
+            ORDER BY ip.pk
+   ) AS order_numberorder_number,
+   ip.cc_debito AS cc_debit,
+   ip.cc_credito AS cc_credito,
+   ip.desprezado AS not_considered,
+   ip.exportado AS was_exported,
+   ip.con_idhistorico AS history_code,
+   ip.historico_novo AS new_history,
+	null as participant_debit,
+	null as participant_credit
+FROM importacao AS ip
+	JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
+WHERE fk_layout <> 0
+ORDER BY fk_layoutempresa
+LIMIT 10000
+</code>
