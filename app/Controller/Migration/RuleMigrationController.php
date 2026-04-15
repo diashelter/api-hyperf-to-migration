@@ -139,14 +139,14 @@ class RuleMigrationController extends AbstractMigrationController
         $record = $this->resolveContractIdFK($record, $contractId);
 
         $record['token'] = $this->parseTokenToWeb($record['token'], $record['layout_id'] ?? null);
-        $record['cpf_cnpj'] = $record['cpf_cnpj'] ? str_replace(['field_cpfcnpj'], 'field_cpf_cnpj', $record['cpf_cnpj'] ) : "NULLIF(#field_cpf_cnpj#,'') IS NULL";
-        $record['client_supplier'] = $record['client_supplier'] ? str_replace(['field_clifor'], 'field_client_supplier', $record['client_supplier'] ) : "NULLIF(#field_client_supplier#,'') IS NULL";
-        $record['history'] = $record['history'] ? str_replace(['fnc_semelhante'], 'fnc_similar', $record['history'] ) : "NULLIF(#field_history#,'') IS NULL";
-        $record['history'] = $record['history'] ? str_replace(['field_historico'], 'field_history', $record['history'] ) : "NULLIF(#field_history#,'') IS NULL";
-        $record['bank'] = $record['bank'] ? str_replace(['field_banco'], 'field_bank', $record['bank'] ) : "NULLIF(#field_bank#,'') IS NULL";
-        $record['filial'] = $record['filial'] ? str_replace(['field_filial'], 'field_filial', $record['filial'] ) : "NULLIF(#field_filial#,'') IS NULL";
-        $record['additional_information'] = $record['additional_information'] ? str_replace(['field_infadicional'], 'field_additional_information', $record['additional_information'] ) : "NULLIF(#field_additional_information#,'') IS NULL";
-        $record['additional_information_3'] = $record['additional_information_3'] ? str_replace(['field_infadicional_compl'], 'field_additional_information_3', $record['additional_information_3'] ) : "NULLIF(#field_additional_information_3#,'') IS NULL";
+        $record['cpf_cnpj'] = $record['cpf_cnpj'] ? str_replace(['field_cpfcnpj'], 'field_cpf_cnpj', $record['cpf_cnpj']) : "NULLIF(#field_cpf_cnpj#,'') IS NULL";
+        $record['client_supplier'] = $record['client_supplier'] ? str_replace(['field_clifor'], 'field_client_supplier', $record['client_supplier']) : "NULLIF(#field_client_supplier#,'') IS NULL";
+        $record['history'] = $record['history'] ? str_replace(['fnc_semelhante'], 'fnc_similar', $record['history']) : "NULLIF(#field_history#,'') IS NULL";
+        $record['history'] = $record['history'] ? str_replace(['field_historico'], 'field_history', $record['history']) : "NULLIF(#field_history#,'') IS NULL";
+        $record['bank'] = $record['bank'] ? str_replace(['field_banco'], 'field_bank', $record['bank']) : "NULLIF(#field_bank#,'') IS NULL";
+        $record['filial'] = $record['filial'] ? str_replace(['field_filial'], 'field_filial', $record['filial']) : "NULLIF(#field_filial#,'') IS NULL";
+        $record['additional_information'] = $record['additional_information'] ? str_replace(['field_infadicional'], 'field_additional_information', $record['additional_information']) : "NULLIF(#field_additional_information#,'') IS NULL";
+        $record['additional_information_3'] = $record['additional_information_3'] ? str_replace(['field_infadicional_compl'], 'field_additional_information_3', $record['additional_information_3']) : "NULLIF(#field_additional_information_3#,'') IS NULL";
 
         return $record;
     }
@@ -164,7 +164,7 @@ class RuleMigrationController extends AbstractMigrationController
         // separar por vírgula
         $parts = explode(',', $removed);
         // mapear para o formato web
-        $webToken = sprintf(
+        return sprintf(
             '(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
             $layout_id,
             $parts[1] === '0' ? 'f' : 't',
@@ -178,6 +178,5 @@ class RuleMigrationController extends AbstractMigrationController
             $parts[8] === '0' ? 'f' : 't',
             'f'
         );
-        return $webToken;
     }
 }

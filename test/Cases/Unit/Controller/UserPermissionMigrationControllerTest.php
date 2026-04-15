@@ -13,8 +13,6 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\UserPermissionMigrationController;
-use App\Exception\BatchTooLargeException;
-use App\Exception\EmptyBatchException;
 use App\Service\IdMappingService;
 use App\Service\LookupCacheService;
 use App\Service\MigrationAuditService;
