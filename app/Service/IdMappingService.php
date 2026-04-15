@@ -1,12 +1,21 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Service;
 
 use App\Model\MigrationIdMapping;
 use Hyperf\DbConnection\Db;
 use Ramsey\Uuid\Uuid;
+use RuntimeException;
 
 use function Hyperf\Support\now;
 
@@ -83,7 +92,7 @@ class IdMappingService
         $newId = $this->resolve($entity, $legacyId, $contractId);
 
         if ($newId === null) {
-            throw new \RuntimeException(
+            throw new RuntimeException(
                 "ID mapping not found for entity '{$entity}' with legacy_id '{$legacyId}'"
             );
         }

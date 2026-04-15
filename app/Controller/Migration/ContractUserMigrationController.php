@@ -1,9 +1,19 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
 use App\Service\IdMappingService;
@@ -19,7 +29,9 @@ use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Ramsey\Uuid\Uuid;
+use Throwable;
 
 /**
  * Pivot table contract_user — sem id próprio, sem timestamps.
@@ -30,6 +42,10 @@ use Ramsey\Uuid\Uuid;
 #[HyperfServer('http')]
 class ContractUserMigrationController
 {
+    private const MAX_BATCH_SIZE = 500;
+
+    private const ENTITY = 'contract_users';
+
     #[Inject]
     protected RequestInterface $request;
 
@@ -48,14 +64,21 @@ class ContractUserMigrationController
     #[Inject]
     protected MigrationAuditService $auditService;
 
-    private const MAX_BATCH_SIZE = 500;
-
-    private const ENTITY = 'contract_users';
-
     #[OA\Post(
         path: '/api/v1/migration/contract-users',
         summary: 'Migrar vínculos usuário × contrato',
-        description: 'Insere vínculos na tabela pivot contract_user (síncrono). Fase 2b — obrigatório para acesso dos usuários ao sistema. Tabela sem id próprio e sem timestamps. Max batch: 500. FK legados: legacy_user_id, legacy_contract_id, legacy_role_id.',
+        description: <<<'DESC'
+        Insere vínculos na tabela pivot `contract_user` (síncrono). Fase 2b — obrigatório para acesso dos usuários ao sistema. Tabela sem id próprio e sem timestamps. Max batch: 500.
+
+        **Resolução de FKs legadas:**
+        - `legacy_user_id` → resolve via `migration_id_mappings` (entidade `users`, escopo `contract_id` do token)
+        - `legacy_contract_id` → resolve via `migration_id_mappings` (entidade `contracts`)
+        - `legacy_role_id` → resolve via `lookup_cache` (entidade `roles`, busca pelo **label**): `owner` | `user` | `admin` | `support`
+
+        **Efeito colateral:** o trigger `seed_permission` no `contract_user` concede automaticamente todas as 52 permissões ao par usuário × contrato. Use o endpoint `/user-permissions` (Fase 2c) para revogar as que o usuário não deve ter.
+
+        **Pré-requisito:** `php bin/hyperf.php migration:seed-lookups roles`
+        DESC,
         tags: ['Migration - Sync'],
         security: [['bearerAuth' => []]],
         parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
@@ -66,52 +89,44 @@ class ContractUserMigrationController
                 example: [
                     'batch' => [
                         [
-                            'legacy_user_id'     => 'USR-001',
-                            'legacy_contract_id' => 'LEG-001',
-                            'legacy_role_id'     => 'ROLE-ADMIN',
-                            'contract_admin'     => true,
+                            'legacy_user_id' => 'USR-001',
+                            'legacy_contract_id' => 'CONTRACT-001',
+                            'legacy_role_id' => 'owner',
+                            'contract_admin' => true,
                         ],
                         [
-                            'legacy_user_id'     => 'USR-002',
-                            'legacy_contract_id' => 'LEG-001',
-                            'legacy_role_id'     => 'ROLE-USER',
-                            'contract_admin'     => false,
+                            'legacy_user_id' => 'USR-002',
+                            'legacy_contract_id' => 'CONTRACT-001',
+                            'legacy_role_id' => 'user',
+                            'contract_admin' => false,
                         ],
                     ],
                 ]
             )
         ),
         responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Migração concluída',
-                content: new OA\JsonContent(
-                    ref: '#/components/schemas/SyncMigrationResponse',
-                    example: [
-                        'inserted'    => 2,
-                        'failed'      => 0,
-                        'errors'      => [],
-                        'id_mappings' => [],
-                    ]
-                )
-            ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 200, description: 'Replay idempotente (todos os registros já existiam)', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 201, description: 'Migração concluída com sucesso', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 207, description: 'Migração parcial — alguns registros falharam', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 413, description: 'Batch excede o limite máximo', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio ou todos os registros falharam', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[PostMapping(path: 'contract-users')]
-    public function migrate(): array
+    public function migrate(): PsrResponseInterface
     {
         $requestId = Uuid::uuid4()->toString();
         $batch = $this->request->input('batch', []);
 
         if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
+            throw new EmptyBatchException();
         }
 
         if (\count($batch) > self::MAX_BATCH_SIZE) {
-            return ['error' => 'Batch size exceeds maximum of ' . self::MAX_BATCH_SIZE, 'code' => 422];
+            throw new BatchTooLargeException(self::MAX_BATCH_SIZE);
         }
 
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
@@ -126,9 +141,9 @@ class ContractUserMigrationController
         );
 
         $rules = [
-            'user_id'        => 'required|uuid',
-            'contract_id'    => 'required|uuid',
-            'role_id'        => 'required|uuid',
+            'user_id' => 'required|uuid',
+            'contract_id' => 'required|uuid',
+            'role_id' => 'required|uuid',
             'contract_admin' => 'nullable|boolean',
         ];
 
@@ -159,8 +174,8 @@ class ContractUserMigrationController
             $validator = $this->validatorFactory->make($record, $rules);
             if ($validator->fails()) {
                 $error = [
-                    'index'             => $index,
-                    'legacy_id'         => null,
+                    'index' => $index,
+                    'legacy_id' => null,
                     'validation_errors' => $validator->errors()->toArray(),
                 ];
                 $validationErrors[] = $error;
@@ -201,7 +216,7 @@ class ContractUserMigrationController
                         'error_message' => null,
                     ];
                 }
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 Db::connection('conciliador_web')->rollBack();
                 $failed = \count($records);
                 $errors[] = ['message' => $e->getMessage()];
@@ -217,21 +232,41 @@ class ContractUserMigrationController
             }
         }
 
-        $response = [
-            'inserted'    => $inserted,
-            'skipped'     => $skipped,
-            'failed'      => $failed + \count($validationErrors),
-            'errors'      => array_merge($validationErrors, $errors),
+        $responsePayload = [
+            'inserted' => $inserted,
+            'skipped' => $skipped,
+            'failed' => $failed + \count($validationErrors),
+            'errors' => array_merge($validationErrors, $errors),
             'id_mappings' => [],
         ];
 
-        $this->auditService->close($requestId, $response);
+        $this->auditService->close($requestId, $responsePayload);
 
         if ($this->auditService->shouldLogRecords(self::ENTITY)) {
             $this->auditService->logRecords($requestId, $contractId, self::ENTITY, $recordLogs);
         }
 
-        return $response;
+        return $this->response->json($responsePayload)->withStatus($this->resolveSyncStatus($responsePayload));
+    }
+
+    private function resolveSyncStatus(array $payload): int
+    {
+        $inserted = (int) ($payload['inserted'] ?? 0);
+        $failed = (int) ($payload['failed'] ?? 0);
+
+        if ($inserted > 0 && $failed === 0) {
+            return 201;
+        }
+
+        if ($inserted > 0 && $failed > 0) {
+            return 207;
+        }
+
+        if ($inserted === 0 && $failed > 0) {
+            return 422;
+        }
+
+        return 200;
     }
 
     private function getRequestIpAddress(): ?string

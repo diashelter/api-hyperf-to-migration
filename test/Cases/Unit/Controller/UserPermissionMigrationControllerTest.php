@@ -1,10 +1,20 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\UserPermissionMigrationController;
+use App\Exception\BatchTooLargeException;
+use App\Exception\EmptyBatchException;
 use App\Service\IdMappingService;
 use App\Service\LookupCacheService;
 use App\Service\MigrationAuditService;
@@ -13,6 +23,9 @@ use Hyperf\Validation\Contract\ValidatorFactoryInterface;
 use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 
+/**
+ * @internal
+ */
 #[CoversClass(UserPermissionMigrationController::class)]
 final class UserPermissionMigrationControllerTest extends UnitTestCase
 {
@@ -63,11 +76,11 @@ final class UserPermissionMigrationControllerTest extends UnitTestCase
                 $this->callback(function (string $requestId) use (&$capturedRequestId): bool {
                     return $requestId === $capturedRequestId;
                 }),
-                $this->callback(function (array $result): bool {
-                    $this->assertSame(0, $result['deleted']);
-                    $this->assertSame(1, $result['failed']);
-                    $this->assertCount(1, $result['errors']);
-                    $this->assertSame('Missing legacy_user_id', $result['errors'][0]['error']);
+                $this->callback(function (array $payload): bool {
+                    $this->assertSame(0, $payload['deleted']);
+                    $this->assertSame(1, $payload['failed']);
+                    $this->assertCount(1, $payload['errors']);
+                    $this->assertSame('Missing legacy_user_id', $payload['errors'][0]['error']);
 
                     return true;
                 })
@@ -94,13 +107,15 @@ final class UserPermissionMigrationControllerTest extends UnitTestCase
                 })
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController($request, auditService: $auditService);
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame(0, $result['deleted']);
-        $this->assertSame(1, $result['failed']);
-        $this->assertCount(1, $result['errors']);
+        $this->assertSame(0, $capturedPayload['deleted']);
+        $this->assertSame(1, $capturedPayload['failed']);
+        $this->assertCount(1, $capturedPayload['errors']);
     }
 
     private function createController(

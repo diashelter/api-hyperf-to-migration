@@ -1,10 +1,19 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Service;
 
 use Hyperf\DbConnection\Db;
+use InvalidArgumentException;
 
 use function Hyperf\Support\env;
 use function Hyperf\Support\now;
@@ -17,15 +26,11 @@ class LookupCacheService
      * Formato: 'entity' => ['table' => '...', 'id_col' => '...', 'label_col' => '...']
      */
     private const ENTITIES = [
-        'roles'         => ['table' => 'roles',         'id_col' => 'id', 'label_col' => 'name'],
-        'status'        => ['table' => 'status',         'id_col' => 'id', 'label_col' => 'name'],
+        'roles' => ['table' => 'roles', 'id_col' => 'id', 'label_col' => 'name'],
+        'status' => ['table' => 'status', 'id_col' => 'id', 'label_col' => 'name'],
         'layouts_admin' => ['table' => 'layouts_admin', 'id_col' => 'id', 'label_col' => 'code'],
+        'permissions' => ['table' => 'permissions', 'id_col' => 'id', 'label_expr' => "module || ':' || name"],
     ];
-
-    private function getEnvironment(): string
-    {
-        return env('APP_ENV', 'local');
-    }
 
     /**
      * Busca todos os registros de uma entidade do conciliador_web
@@ -34,16 +39,20 @@ class LookupCacheService
     public function seed(string $entity): int
     {
         if (! isset(self::ENTITIES[$entity])) {
-            throw new \InvalidArgumentException("Entity '{$entity}' is not supported for lookup caching.");
+            throw new InvalidArgumentException("Entity '{$entity}' is not supported for lookup caching.");
         }
 
-        $config  = self::ENTITIES[$entity];
-        $env     = $this->getEnvironment();
-        $now     = now()->toDateTimeString();
+        $config = self::ENTITIES[$entity];
+        $env = $this->getEnvironment();
+        $now = now()->toDateTimeString();
+
+        $selectExpr = isset($config['label_expr'])
+            ? "{$config['id_col']} as external_id, {$config['label_expr']} as label"
+            : "{$config['id_col']} as external_id, {$config['label_col']} as label";
 
         $rows = Db::connection('conciliador_web')
             ->table($config['table'])
-            ->select($config['id_col'] . ' as external_id', $config['label_col'] . ' as label')
+            ->selectRaw($selectExpr)
             ->get()
             ->toArray();
 
@@ -54,12 +63,13 @@ class LookupCacheService
         $records = [];
         foreach ($rows as $row) {
             $records[] = [
-                'entity'      => $entity,
+                'entity' => $entity,
                 'external_id' => (string) $row->external_id,
-                'label'       => $row->label ?? null,
-                'payload'     => null,
+                'label' => $row->label ?? null,
+                'payload' => null,
                 'environment' => $env,
-                'created_at'  => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
         }
 
@@ -68,7 +78,7 @@ class LookupCacheService
             Db::table('lookup_cache')->upsert(
                 $chunk,
                 ['entity', 'external_id', 'environment'],
-                ['label', 'payload']
+                ['label', 'payload', 'updated_at']
             );
         }
 
@@ -140,5 +150,10 @@ class LookupCacheService
     public static function supportedEntities(): array
     {
         return array_keys(self::ENTITIES);
+    }
+
+    private function getEnvironment(): string
+    {
+        return env('APP_ENV', 'local');
     }
 }

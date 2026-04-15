@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -12,12 +20,60 @@ use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
 #[HyperfServer('http')]
 class CompanyMigrationController extends AbstractMigrationController
 {
+    #[OA\Post(
+        path: '/api/v1/migration/companies',
+        summary: 'Migrar empresas',
+        description: 'Insere empresas em lote (síncrono). Fase 4 da migração — depende de contracts, plans, rules_sharings. Max batch: 100. FK legados aceitos: legacy_contract_id, legacy_plan_id, legacy_rules_sharing_id.',
+        tags: ['Migration - Sync'],
+        security: [['bearerAuth' => []]],
+        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                ref: '#/components/schemas/MigrationBatchRequest',
+                example: [
+                    'batch' => [
+                        [
+                            'legacy_id' => 'EMP-001',
+                            'code' => 1,
+                            'cpf_cnpj' => '98765432000188',
+                            'corporate_name' => 'Empresa Filial Ltda',
+                            'tax_regime' => 'Lucro Presumido',
+                            'city' => 'Campinas',
+                            'state' => 'SP',
+                            'email' => 'filial@empresa.com',
+                            'is_active' => true,
+                            'legacy_contract_id' => 'LEG-001',
+                            'legacy_plan_id' => 'PLN-001',
+                        ],
+                    ],
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Replay idempotente (todos os registros já existiam)', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 201, description: 'Migração concluída com sucesso', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 207, description: 'Migração parcial — alguns registros falharam', content: new OA\JsonContent(ref: '#/components/schemas/SyncMigrationResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 413, description: 'Batch excede o limite máximo', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio ou todos os registros falharam', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+        ]
+    )]
+    #[PostMapping(path: 'companies')]
+    public function migrate(): PsrResponseInterface
+    {
+        return $this->syncMigrate();
+    }
+
     protected function getTable(): string
     {
         return 'companies';
@@ -41,94 +97,29 @@ class CompanyMigrationController extends AbstractMigrationController
     protected function validationRules(): array
     {
         return [
-            'code'           => 'required|int',
-            'cpf_cnpj'       => 'required|string|size:14',
+            'code' => 'required|int',
+            'cpf_cnpj' => 'required|string|size:14',
             'corporate_name' => 'nullable|string|max:255',
-            'external_code'  => 'nullable|string|max:20',
-            'tax_regime'     => 'required|in:Lucro Real,Lucro Presumido,Simples Nacional,Outros',
-            'street'         => 'nullable|string|max:255',
-            'number'         => 'nullable|string|max:50',
-            'neighborhood'   => 'nullable|string|max:100',
-            'city'           => 'nullable|string|max:100',
-            'complement'     => 'nullable|string',
-            'state'          => 'nullable|string|size:2',
-            'zipcode'        => 'nullable|string|max:10',
-            'state_registration'          => 'nullable|string|max:20',
-            'city_registration'           => 'nullable|string|max:20',
-            'phone'          => 'nullable|string|max:15',
-            'phone_cell'     => 'nullable|string|max:15',
-            'email'          => 'nullable|email|max:100',
-            'is_active'      => 'nullable|boolean',
-            'observation'    => 'nullable|string',
-            'use_participant'             => 'nullable|boolean',
-            'use_cost_center'             => 'nullable|boolean',
+            'external_code' => 'nullable|string|max:20',
+            'tax_regime' => 'required|in:Lucro Real,Lucro Presumido,Simples Nacional,Outros',
+            'street' => 'nullable|string|max:255',
+            'number' => 'nullable|string|max:50',
+            'neighborhood' => 'nullable|string|max:100',
+            'city' => 'nullable|string|max:100',
+            'complement' => 'nullable|string',
+            'state' => 'nullable|string|size:2',
+            'zipcode' => 'nullable|string|max:10',
+            'state_registration' => 'nullable|string|max:20',
+            'city_registration' => 'nullable|string|max:20',
+            'phone' => 'nullable|string|max:15',
+            'phone_cell' => 'nullable|string|max:15',
+            'email' => 'nullable|email|max:100',
+            'is_active' => 'nullable|boolean',
+            'observation' => 'nullable|string',
+            'use_participant' => 'nullable|boolean',
+            'use_cost_center' => 'nullable|boolean',
             'use_auto_register_of_people' => 'nullable|boolean',
         ];
-    }
-
-    #[OA\Post(
-        path: '/api/v1/migration/companies',
-        summary: 'Migrar empresas',
-        description: 'Insere empresas em lote (síncrono). Fase 4 da migração — depende de contracts, plans, rules_sharings. Max batch: 100. FK legados aceitos: legacy_contract_id, legacy_plan_id, legacy_rules_sharing_id.',
-        tags: ['Migration - Sync'],
-        security: [['bearerAuth' => []]],
-        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                ref: '#/components/schemas/MigrationBatchRequest',
-                example: [
-                    'batch' => [
-                        [
-                            'legacy_id'             => 'EMP-001',
-                            'code'                  => 'EMP001',
-                            'cpf_cnpj'              => '98765432000188',
-                            'corporate_name'        => 'Empresa Filial Ltda',
-                            'tax_regime'            => 'Lucro Presumido',
-                            'city'                  => 'Campinas',
-                            'state'                 => 'SP',
-                            'email'                 => 'filial@empresa.com',
-                            'is_active'             => true,
-                            'legacy_contract_id'    => 'LEG-001',
-                            'legacy_plan_id'        => 'PLN-001',
-                        ],
-                    ],
-                ]
-            )
-        ),
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Migração concluída',
-                content: new OA\JsonContent(
-                    ref: '#/components/schemas/SyncMigrationResponse',
-                    example: [
-                        'inserted'    => 1,
-                        'failed'      => 0,
-                        'errors'      => [],
-                        'id_mappings' => ['EMP-001' => 'eee55555-0000-0000-0000-000000000001'],
-                    ]
-                )
-            ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
-        ]
-    )]
-    #[PostMapping(path: 'companies')]
-    public function migrate(): array
-    {
-        $batch = $this->request->input('batch', []);
-
-        if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
-        }
-
-        if (\count($batch) > $this->getMaxBatchSize()) {
-            return ['error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}", 'code' => 422];
-        }
-
-        return $this->syncMigrate();
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array
@@ -144,7 +135,7 @@ class CompanyMigrationController extends AbstractMigrationController
 
         if (! empty($record['legacy_rules_sharing_id'])) {
             $record['rules_sharing_id'] = $this->idMappingService->resolve('rules_sharings', $record['legacy_rules_sharing_id'], $contractId) ?? $record['rules_sharing_id'] ?? null;
-        }    
+        }
         unset($record['legacy_rules_sharing_id']);
         // Mutator do Model Company: city é convertido para UPPERCASE
         // (não aplicado automaticamente em DB::table()->insert())

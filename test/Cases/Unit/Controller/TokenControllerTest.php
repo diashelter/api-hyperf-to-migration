@@ -1,15 +1,27 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\TokenController;
+use App\Exception\UnauthorizedException;
 use App\Service\TokenService;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 
+/**
+ * @internal
+ */
 #[CoversClass(TokenController::class)]
 final class TokenControllerTest extends UnitTestCase
 {
@@ -40,10 +52,8 @@ final class TokenControllerTest extends UnitTestCase
 
         $controller = $this->createController($request, $tokenService);
 
-        $this->assertSame(
-            ['error' => 'Invalid secret', 'code' => 401],
-            $controller->generate()
-        );
+        $this->expectException(UnauthorizedException::class);
+        $controller->generate();
     }
 
     public function testGenerateReturnsTokenPayloadWhenSecretIsValid(): void
@@ -66,23 +76,26 @@ final class TokenControllerTest extends UnitTestCase
             ->with('user-1', 'contract-1')
             ->willReturn('jwt-token');
 
-        $controller = $this->createController($request, $tokenService);
+        $responseMock = $this->createResponseMock($capturedPayload);
+        $controller = $this->createController($request, $tokenService, $responseMock);
 
-        $this->assertSame(
-            [
-                'token' => 'jwt-token',
-                'type' => 'Bearer',
-                'expires_in' => 1800,
-            ],
-            $controller->generate()
-        );
+        $controller->generate();
+
+        $this->assertSame([
+            'token' => 'jwt-token',
+            'type' => 'Bearer',
+            'expires_in' => 1800,
+        ], $capturedPayload);
     }
 
-    private function createController(RequestInterface $request, TokenService $tokenService): TokenController
+    private function createController(RequestInterface $request, TokenService $tokenService, mixed $responseMock = null): TokenController
     {
         $controller = new TokenController();
         $this->injectProperty($controller, 'request', $request);
         $this->injectProperty($controller, 'tokenService', $tokenService);
+        if ($responseMock !== null) {
+            $this->injectProperty($controller, 'response', $responseMock);
+        }
 
         return $controller;
     }

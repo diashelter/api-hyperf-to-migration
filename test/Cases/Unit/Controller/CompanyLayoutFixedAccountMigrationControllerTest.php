@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Unit\Controller;
 
-use App\Controller\Migration\CompanyMigrationController;
+use App\Controller\Migration\CompanyLayoutFixedAccountMigrationController;
 use App\Exception\BatchTooLargeException;
 use App\Exception\EmptyBatchException;
 use App\Service\IdMappingService;
@@ -27,8 +27,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 /**
  * @internal
  */
-#[CoversClass(CompanyMigrationController::class)]
-final class CompanyMigrationControllerTest extends UnitTestCase
+#[CoversClass(CompanyLayoutFixedAccountMigrationController::class)]
+final class CompanyLayoutFixedAccountMigrationControllerTest extends UnitTestCase
 {
     public function testMigrateThrowsEmptyBatchException(): void
     {
@@ -38,12 +38,7 @@ final class CompanyMigrationControllerTest extends UnitTestCase
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertSync');
 
-        $controller = $this->createController(
-            $request,
-            $insertService,
-            $this->createStub(IdMappingService::class),
-            $this->createStub(MigrationBatchService::class)
-        );
+        $controller = $this->createController($request, $insertService);
 
         $this->expectException(EmptyBatchException::class);
         $controller->migrate();
@@ -52,17 +47,12 @@ final class CompanyMigrationControllerTest extends UnitTestCase
     public function testMigrateThrowsBatchTooLargeException(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $request->method('input')->with('batch', [])->willReturn(array_fill(0, 101, ['name' => 'Company']));
+        $request->method('input')->with('batch', [])->willReturn(array_fill(0, 201, ['legacy_company_layout_id' => 'CL-001']));
 
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertSync');
 
-        $controller = $this->createController(
-            $request,
-            $insertService,
-            $this->createStub(IdMappingService::class),
-            $this->createStub(MigrationBatchService::class)
-        );
+        $controller = $this->createController($request, $insertService);
 
         $this->expectException(BatchTooLargeException::class);
         $controller->migrate();
@@ -71,11 +61,14 @@ final class CompanyMigrationControllerTest extends UnitTestCase
     public function testMigrateTransformsAndPersistsSyncBatch(): void
     {
         $batch = [[
-            'legacy_id' => 'legacy-company-1',
-            'legacy_contract_id' => 'legacy-contract-1',
-            'legacy_plan_id' => 'legacy-plan-1',
-            'legacy_rules_sharing_id' => 'legacy-rules-sharing-1',
-            'name' => 'ACME',
+            'legacy_id' => 'CFA-001',
+            'legacy_company_layout_id' => 'CL-001',
+            'bank' => 'BRADESCO',
+            'is_default_account' => false,
+            'value_debit' => '1.1.01',
+            'value_code_history_debit' => '001',
+            'value_history_debit' => 'RECEBIMENTO',
+            'value_credit' => '4.1.01',
         ]];
 
         $request = $this->createMock(RequestInterface::class);
@@ -93,13 +86,10 @@ final class CompanyMigrationControllerTest extends UnitTestCase
             ->willReturn('contract-1');
 
         $idMappingService = $this->createMock(IdMappingService::class);
-        $idMappingService->expects($this->exactly(3))
+        $idMappingService->expects($this->once())
             ->method('resolve')
-            ->willReturnMap([
-                ['contracts', 'legacy-contract-1', 'contract-1', 'contract-uuid-1'],
-                ['plans', 'legacy-plan-1', 'contract-1', 'plan-uuid-1'],
-                ['rules_sharings', 'legacy-rules-sharing-1', 'contract-1', 'rules-sharing-uuid-1'],
-            ]);
+            ->with('company_layout', 'CL-001', 'contract-1')
+            ->willReturn('company-layout-uuid-1');
 
         $persistedRecords = [];
         $generatedId = null;
@@ -108,7 +98,7 @@ final class CompanyMigrationControllerTest extends UnitTestCase
         $insertService->expects($this->once())
             ->method('insertSync')
             ->with(
-                'companies',
+                'company_layout_fixed_accounts',
                 $this->callback(function (array $records) use (&$persistedRecords): bool {
                     $persistedRecords = $records;
 
@@ -119,28 +109,30 @@ final class CompanyMigrationControllerTest extends UnitTestCase
                     $record = $records[0];
 
                     $this->assertArrayNotHasKey('legacy_id', $record);
-                    $this->assertArrayNotHasKey('legacy_contract_id', $record);
-                    $this->assertArrayNotHasKey('legacy_plan_id', $record);
-                    $this->assertArrayNotHasKey('legacy_rules_sharing_id', $record);
-                    $this->assertSame('ACME', $record['name']);
-                    $this->assertSame('contract-uuid-1', $record['contract_id']);
-                    $this->assertSame('plan-uuid-1', $record['plan_id']);
-                    $this->assertSame('rules-sharing-uuid-1', $record['rules_sharing_id']);
+                    $this->assertArrayNotHasKey('legacy_company_layout_id', $record);
+                    $this->assertSame('company-layout-uuid-1', $record['company_layout_id']);
+                    $this->assertSame('BRADESCO', $record['bank']);
+                    $this->assertFalse($record['is_default_account']);
+                    $this->assertSame('1.1.01', $record['value_debit']);
+                    $this->assertSame('001', $record['value_code_history_debit']);
+                    $this->assertSame('RECEBIMENTO', $record['value_history_debit']);
+                    $this->assertSame('4.1.01', $record['value_credit']);
                     $this->assertMatchesRegularExpression(self::UUID_PATTERN, $record['id']);
                     $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $record['created_at']);
                     $this->assertSame($record['created_at'], $record['updated_at']);
 
                     return true;
-                })
+                }),
+                'conciliador_web'
             )
             ->willReturn(['inserted' => 1, 'failed' => 0, 'errors' => []]);
 
         $idMappingService->expects($this->once())
             ->method('storeBatch')
             ->with(
-                'companies',
+                'company_layout_fixed_accounts',
                 $this->callback(function (array $mappings) use (&$generatedId): bool {
-                    $generatedId = $mappings['legacy-company-1'] ?? null;
+                    $generatedId = $mappings['CFA-001'] ?? null;
 
                     return is_string($generatedId)
                         && preg_match(self::UUID_PATTERN, $generatedId) === 1;
@@ -172,8 +164,49 @@ final class CompanyMigrationControllerTest extends UnitTestCase
         $this->assertSame(1, $capturedPayload['inserted']);
         $this->assertSame(0, $capturedPayload['failed']);
         $this->assertSame([], $capturedPayload['errors']);
-        $this->assertSame(['legacy-company-1' => $generatedId], $capturedPayload['id_mappings']);
+        $this->assertSame(['CFA-001' => $generatedId], $capturedPayload['id_mappings']);
         $this->assertSame($generatedId, $persistedRecords[0]['id']);
+    }
+
+    public function testMigrateSkipsDuplicates(): void
+    {
+        $batch = [[
+            'legacy_id' => 'CFA-001',
+            'legacy_company_layout_id' => 'CL-001',
+            'value_debit' => '1.1.01',
+        ]];
+
+        $request = $this->createMock(RequestInterface::class);
+        $request->method('input')->with('batch', [])->willReturn($batch);
+        $request->method('header')->with('X-Contract-Id', '')->willReturn('header-contract');
+        $request->method('getAttribute')->with('contract_id', 'header-contract')->willReturn('contract-1');
+
+        $idMappingService = $this->createMock(IdMappingService::class);
+        $idMappingService->expects($this->once())
+            ->method('resolveMany')
+            ->with('company_layout_fixed_accounts', ['CFA-001'], 'contract-1')
+            ->willReturn(['CFA-001' => 'existing-uuid-1']);
+
+        $insertService = $this->createMock(ParallelInsertService::class);
+        $insertService->expects($this->never())->method('insertSync');
+
+        $responseMock = $this->createResponseMock($capturedPayload);
+
+        $controller = $this->createController(
+            $request,
+            $insertService,
+            $idMappingService,
+            $this->createStub(MigrationBatchService::class),
+            $this->createStub(ValidatorFactoryInterface::class),
+            $responseMock
+        );
+
+        $controller->migrate();
+
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['skipped']);
+        $this->assertSame(0, $capturedPayload['failed']);
+        $this->assertSame(['CFA-001' => 'existing-uuid-1'], $capturedPayload['id_mappings']);
     }
 
     private function createController(
@@ -183,8 +216,8 @@ final class CompanyMigrationControllerTest extends UnitTestCase
         ?MigrationBatchService $batchService = null,
         ?ValidatorFactoryInterface $validatorFactory = null,
         mixed $responseMock = null
-    ): CompanyMigrationController {
-        $controller = new CompanyMigrationController();
+    ): CompanyLayoutFixedAccountMigrationController {
+        $controller = new CompanyLayoutFixedAccountMigrationController();
         $this->injectProperty($controller, 'request', $request);
         $this->injectProperty($controller, 'insertService', $insertService);
         $this->injectProperty($controller, 'idMappingService', $idMappingService ?? $this->createStub(IdMappingService::class));

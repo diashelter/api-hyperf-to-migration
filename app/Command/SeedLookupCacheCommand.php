@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Command;
 
@@ -15,7 +23,7 @@ class SeedLookupCacheCommand extends HyperfCommand
 {
     protected ?string $name = 'migration:seed-lookups';
 
-    protected string $description = 'Busca dados de referência do conciliador_web e popula o lookup_cache local. Execute uma vez por ambiente antes de subir o servidor.';
+    protected string $description = 'Busca dados de referência do conciliador_web e popula o lookup_cache local. Idempotente: pode ser executado múltiplas vezes com segurança.';
 
     public function __construct(protected ContainerInterface $container)
     {
@@ -28,7 +36,7 @@ class SeedLookupCacheCommand extends HyperfCommand
         $this->addArgument(
             'entity',
             InputArgument::OPTIONAL,
-            'Entidade específica para seed (roles|status|layouts_admin). Omitir para processar todas.',
+            'Entidade específica para seed (roles|status|layouts_admin|permissions). Omitir para processar todas.',
         );
     }
 

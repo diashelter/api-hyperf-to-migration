@@ -1,6 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
@@ -12,12 +20,59 @@ use Hyperf\HttpServer\Annotation\Middlewares;
 use Hyperf\HttpServer\Annotation\PostMapping;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
 #[HyperfServer('http')]
 class ConfrontationRecordMigrationController extends AbstractMigrationController
 {
+    #[OA\Post(
+        path: '/api/v1/migration/confrontation-records',
+        summary: 'Migrar registros de confrontação (async)',
+        description: 'Insere registros de confrontação em lote via processamento paralelo com coroutines Swoole. Fase 9 — depende de confrontations, import_records, imports. Max batch: 1000. Rate limit: 30 req/min. FK legados: legacy_confrontation_id, legacy_import_record_id, legacy_import_id.',
+        tags: ['Migration - Async'],
+        security: [['bearerAuth' => []]],
+        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                ref: '#/components/schemas/MigrationBatchRequest',
+                example: [
+                    'batch' => [
+                        [
+                            'legacy_id' => 'CR-001',
+                            'date' => '2024-01-10',
+                            'layout_code' => 'CSB01',
+                            'debit_credit' => 'D',
+                            'value' => 1500.00,
+                            'records_origin' => 'F',
+                            'history' => 'Pagamento fornecedor',
+                            'client_supplier' => 'Fornecedor ABC',
+                            'num_doc' => 'NF-001234',
+                            'conciliated_value' => 1500.00,
+                            'legacy_confrontation_id' => 'CON-001',
+                            'legacy_import_record_id' => 'IR-0001',
+                        ],
+                    ],
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 202, description: 'Batch aceito para processamento assíncrono', content: new OA\JsonContent(ref: '#/components/schemas/AsyncMigrationResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 413, description: 'Batch excede o limite máximo', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Batch vazio', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+        ]
+    )]
+    #[PostMapping(path: 'confrontation-records')]
+    public function migrate(): PsrResponseInterface
+    {
+        return $this->asyncMigrate();
+    }
+
     protected function getTable(): string
     {
         return 'confrontation_records';
@@ -41,89 +96,18 @@ class ConfrontationRecordMigrationController extends AbstractMigrationController
     protected function validationRules(): array
     {
         return [
-            'date'              => 'required|date',
-            'layout_code'       => 'required|string|max:5',
-            'debit_credit'      => 'required|in:D,C',
-            'value'             => 'required|numeric',
-            'records_origin'    => 'nullable|in:F,B',
-            'history'           => 'nullable|string',
-            'client_supplier'   => 'nullable|string|max:255',
-            'num_doc'           => 'nullable|string|max:255',
-            'bank'              => 'nullable|string|max:100',
-            'cpf_cnpj'          => 'nullable|string|max:14',
+            'date' => 'required|date',
+            'layout_code' => 'required|string|max:5',
+            'debit_credit' => 'required|in:D,C',
+            'value' => 'required|numeric',
+            'records_origin' => 'nullable|in:F,B',
+            'history' => 'nullable|string',
+            'client_supplier' => 'nullable|string|max:255',
+            'num_doc' => 'nullable|string|max:255',
+            'bank' => 'nullable|string|max:100',
+            'cpf_cnpj' => 'nullable|string|max:14',
             'conciliated_value' => 'nullable|numeric',
         ];
-    }
-
-    #[OA\Post(
-        path: '/api/v1/migration/confrontation-records',
-        summary: 'Migrar registros de confrontação (async)',
-        description: 'Insere registros de confrontação em lote via processamento paralelo com coroutines Swoole. Fase 9 — depende de confrontations, import_records, imports. Max batch: 1000. Rate limit: 30 req/min. FK legados: legacy_confrontation_id, legacy_import_record_id, legacy_import_id.',
-        tags: ['Migration - Async'],
-        security: [['bearerAuth' => []]],
-        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                ref: '#/components/schemas/MigrationBatchRequest',
-                example: [
-                    'batch' => [
-                        [
-                            'legacy_id'                  => 'CR-001',
-                            'date'                       => '2024-01-10',
-                            'layout_code'                => 'CSB01',
-                            'debit_credit'               => 'D',
-                            'value'                      => 1500.00,
-                            'records_origin'             => 'F',
-                            'history'                    => 'Pagamento fornecedor',
-                            'client_supplier'            => 'Fornecedor ABC',
-                            'num_doc'                    => 'NF-001234',
-                            'conciliated_value'          => 1500.00,
-                            'legacy_confrontation_id'    => 'CON-001',
-                            'legacy_import_record_id'    => 'IR-0001',
-                        ],
-                    ],
-                ]
-            )
-        ),
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Migração processada',
-                content: new OA\JsonContent(
-                    ref: '#/components/schemas/AsyncMigrationResponse',
-                    example: [
-                        'migration_batch_id' => '990e8400-e29b-41d4-a716-446655440004',
-                        'entity'             => 'confrontation_records',
-                        'total_received'     => 1,
-                        'status'             => 'completed',
-                        'inserted'           => 1,
-                        'failed'             => 0,
-                        'errors'             => null,
-                        'id_mappings'        => [],
-                        'status_url'         => '/api/v1/migration/status/990e8400-e29b-41d4-a716-446655440004',
-                    ]
-                )
-            ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Batch vazio ou excede limite', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
-        ]
-    )]
-    #[PostMapping(path: 'confrontation-records')]
-    public function migrate(): array
-    {
-        $batch = $this->request->input('batch', []);
-
-        if (empty($batch)) {
-            return ['error' => 'Empty batch', 'code' => 422];
-        }
-
-        if (\count($batch) > $this->getMaxBatchSize()) {
-            return ['error' => "Batch size exceeds maximum of {$this->getMaxBatchSize()}", 'code' => 422];
-        }
-
-        return $this->asyncMigrate();
     }
 
     protected function resolveForeignKeys(array $record, string $contractId): array

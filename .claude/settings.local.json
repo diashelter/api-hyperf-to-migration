@@ -41,7 +41,15 @@
       "Bash(python3 -c ':*)",
       "Bash(chmod +x:*)",
       "Bash(bash:*)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(grep:*)",
+      "Bash(curl -s http://localhost:9500/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:9500/api/v1/token -X POST -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl:*)",
+      "Bash(python3 -m json.tool)",
+      "Bash(git stash:*)",
+      "Bash(xxd)",
+      "Bash(python3:*)"
     ]
   }
 }

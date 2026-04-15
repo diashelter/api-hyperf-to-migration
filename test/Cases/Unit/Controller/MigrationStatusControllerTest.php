@@ -1,16 +1,30 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\MigrationStatusController;
+use App\Exception\ResourceNotFoundException;
+use App\Exception\ValidationFailedException;
 use App\Service\IdMappingService;
 use App\Service\MigrationBatchService;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 
+/**
+ * @internal
+ */
 #[CoversClass(MigrationStatusController::class)]
 final class MigrationStatusControllerTest extends UnitTestCase
 {
@@ -28,10 +42,8 @@ final class MigrationStatusControllerTest extends UnitTestCase
             $this->createStub(IdMappingService::class)
         );
 
-        $this->assertSame(
-            ['error' => 'Batch not found', 'code' => 404],
-            $controller->show('batch-1')
-        );
+        $this->expectException(ResourceNotFoundException::class);
+        $controller->show('batch-1');
     }
 
     public function testShowReturnsBatchStatusWhenItExists(): void
@@ -44,13 +56,18 @@ final class MigrationStatusControllerTest extends UnitTestCase
             ->with('batch-1')
             ->willReturn($status);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController(
             $this->createStub(RequestInterface::class),
             $batchService,
-            $this->createStub(IdMappingService::class)
+            $this->createStub(IdMappingService::class),
+            $responseMock
         );
 
-        $this->assertSame($status, $controller->show('batch-1'));
+        $result = $controller->show('batch-1');
+
+        $this->assertInstanceOf(PsrResponseInterface::class, $result);
+        $this->assertSame($status, $capturedPayload);
     }
 
     public function testIndexListsBatchesUsingResolvedContractId(): void
@@ -71,13 +88,18 @@ final class MigrationStatusControllerTest extends UnitTestCase
             ->with('contract-1')
             ->willReturn([['id' => 'batch-1']]);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController(
             $request,
             $batchService,
-            $this->createStub(IdMappingService::class)
+            $this->createStub(IdMappingService::class),
+            $responseMock
         );
 
-        $this->assertSame([['id' => 'batch-1']], $controller->index());
+        $result = $controller->index();
+
+        $this->assertInstanceOf(PsrResponseInterface::class, $result);
+        $this->assertSame([['id' => 'batch-1']], $capturedPayload);
     }
 
     public function testIdMappingValidatesRequiredParameters(): void
@@ -102,10 +124,8 @@ final class MigrationStatusControllerTest extends UnitTestCase
             $idMappingService
         );
 
-        $this->assertSame(
-            ['error' => 'entity and legacy_ids are required', 'code' => 422],
-            $controller->idMapping()
-        );
+        $this->expectException(ValidationFailedException::class);
+        $controller->idMapping();
     }
 
     public function testIdMappingReturnsMappingsWhenParametersAreValid(): void
@@ -135,27 +155,33 @@ final class MigrationStatusControllerTest extends UnitTestCase
             ->with('companies', ['legacy-1', 'legacy-2'], 'contract-1')
             ->willReturn(['legacy-1' => 'uuid-1']);
 
+        $responseMock = $this->createResponseMock($capturedPayload);
         $controller = $this->createController(
             $request,
             $this->createStub(MigrationBatchService::class),
-            $idMappingService
+            $idMappingService,
+            $responseMock
         );
 
-        $this->assertSame(
-            ['mappings' => ['legacy-1' => 'uuid-1']],
-            $controller->idMapping()
-        );
+        $result = $controller->idMapping();
+
+        $this->assertInstanceOf(PsrResponseInterface::class, $result);
+        $this->assertSame(['mappings' => ['legacy-1' => 'uuid-1']], $capturedPayload);
     }
 
     private function createController(
         RequestInterface $request,
         MigrationBatchService $batchService,
-        IdMappingService $idMappingService
+        IdMappingService $idMappingService,
+        mixed $responseMock = null
     ): MigrationStatusController {
         $controller = new MigrationStatusController();
         $this->injectProperty($controller, 'request', $request);
         $this->injectProperty($controller, 'batchService', $batchService);
         $this->injectProperty($controller, 'idMappingService', $idMappingService);
+        if ($responseMock !== null) {
+            $this->injectProperty($controller, 'response', $responseMock);
+        }
 
         return $controller;
     }

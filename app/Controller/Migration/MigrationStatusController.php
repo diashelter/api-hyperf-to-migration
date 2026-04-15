@@ -1,14 +1,24 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace App\Controller\Migration;
 
+use App\Exception\ResourceNotFoundException;
+use App\Exception\ValidationFailedException;
+use App\Middleware\ApiTokenMiddleware;
+use App\Middleware\RateLimitMiddleware;
 use App\Service\IdMappingService;
 use App\Service\MigrationBatchService;
 use Hyperf\Di\Annotation\Inject;
-use App\Middleware\ApiTokenMiddleware;
-use App\Middleware\RateLimitMiddleware;
 use Hyperf\HttpServer\Annotation\Controller;
 use Hyperf\HttpServer\Annotation\GetMapping;
 use Hyperf\HttpServer\Annotation\Middlewares;
@@ -17,6 +27,7 @@ use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface;
 use Hyperf\Swagger\Annotation\HyperfServer;
 use OpenApi\Attributes as OA;
+use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 
 #[Controller(prefix: '/api/v1/migration')]
 #[Middlewares([ApiTokenMiddleware::class, RateLimitMiddleware::class])]
@@ -53,20 +64,21 @@ class MigrationStatusController
         ],
         responses: [
             new OA\Response(response: 200, description: 'Status do batch', content: new OA\JsonContent(ref: '#/components/schemas/MigrationBatchStatus')),
-            new OA\Response(response: 404, description: 'Batch não encontrado', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 404, description: 'Batch não encontrado', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[GetMapping(path: 'status/{batchId}')]
-    public function show(string $batchId): array
+    public function show(string $batchId): PsrResponseInterface
     {
         $status = $this->batchService->getStatus($batchId);
 
         if (! $status) {
-            return ['error' => 'Batch not found', 'code' => 404];
+            throw new ResourceNotFoundException("Migration batch '{$batchId}' not found.");
         }
 
-        return $status;
+        return $this->response->json($status);
     }
 
     #[OA\Get(
@@ -85,19 +97,21 @@ class MigrationStatusController
                     items: new OA\Items(ref: '#/components/schemas/MigrationBatchStatus')
                 )
             ),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: 'Header X-Contract-Id ausente', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[GetMapping(path: 'status')]
-    public function index(): array
+    public function index(): PsrResponseInterface
     {
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
 
         if (empty($contractId)) {
-            return ['error' => 'Missing X-Contract-Id header', 'code' => 422];
+            throw new ValidationFailedException("The 'X-Contract-Id' header is required.");
         }
 
-        return $this->batchService->listByContract($contractId);
+        return $this->response->json($this->batchService->listByContract($contractId));
     }
 
     #[OA\Post(
@@ -113,23 +127,24 @@ class MigrationStatusController
         ),
         responses: [
             new OA\Response(response: 200, description: 'Mapeamentos encontrados', content: new OA\JsonContent(ref: '#/components/schemas/IdMappingResponse')),
-            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 422, description: 'Parâmetros obrigatórios ausentes', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(response: 401, description: 'Token inválido', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: "Parâmetros 'entity' ou 'legacy_ids' ausentes", content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
     )]
     #[PostMapping(path: 'id-mapping')]
-    public function idMapping(): array
+    public function idMapping(): PsrResponseInterface
     {
         $entity = $this->request->input('entity', '');
         $legacyIds = $this->request->input('legacy_ids', []);
         $contractId = $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
 
         if (empty($entity) || empty($legacyIds)) {
-            return ['error' => 'entity and legacy_ids are required', 'code' => 422];
+            throw new ValidationFailedException("Both 'entity' and 'legacy_ids' are required.");
         }
 
         $mappings = $this->idMappingService->resolveMany($entity, $legacyIds, $contractId);
 
-        return ['mappings' => $mappings];
+        return $this->response->json(['mappings' => $mappings]);
     }
 }

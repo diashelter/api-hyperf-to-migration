@@ -1,10 +1,19 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * This file is part of Hyperf.
+ *
+ * @link     https://www.hyperf.io
+ * @document https://hyperf.wiki
+ * @contact  group@hyperf.io
+ * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ */
 
 namespace HyperfTest\Cases\Unit\Controller;
 
 use App\Controller\Migration\ImportRecordMigrationController;
+use App\Exception\BatchTooLargeException;
 use App\Model\MigrationBatch;
 use App\Service\IdMappingService;
 use App\Service\MigrationAuditService;
@@ -17,18 +26,34 @@ use HyperfTest\UnitTestCase;
 use PHPUnit\Framework\Attributes\CoversClass;
 use Ramsey\Uuid\Uuid;
 
+/**
+ * @internal
+ */
 #[CoversClass(ImportRecordMigrationController::class)]
 final class ImportRecordMigrationControllerTest extends UnitTestCase
 {
     public function testMigrateReturnsValidationErrorWhenBatchExceedsLimit(): void
     {
         $request = $this->createMock(RequestInterface::class);
-        $request->expects($this->exactly(2))
+        $request->expects($this->exactly(3))
             ->method('input')
-            ->willReturnMap([
-                ['batch', [], array_fill(0, 2001, ['name' => 'Record'])],
-                ['finalize', false, false],
-            ]);
+            ->willReturnCallback(
+                static function (string $key, mixed $default = null): mixed {
+                    return match ($key) {
+                        'batch' => array_fill(0, 2001, ['name' => 'Record']),
+                        'finalize' => false,
+                        default => $default,
+                    };
+                }
+            );
+        $request->expects($this->once())
+            ->method('header')
+            ->with('X-Contract-Id', '')
+            ->willReturn('header-contract');
+        $request->expects($this->once())
+            ->method('getAttribute')
+            ->with('contract_id', 'header-contract')
+            ->willReturn('contract-1');
 
         $insertService = $this->createMock(ParallelInsertService::class);
         $insertService->expects($this->never())->method('insertBatch');
@@ -40,10 +65,8 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
             $this->createStub(MigrationBatchService::class)
         );
 
-        $this->assertSame(
-            ['error' => 'Batch size exceeds maximum of 2000', 'code' => 422],
-            $controller->migrate()
-        );
+        $this->expectException(BatchTooLargeException::class);
+        $controller->migrate();
     }
 
     public function testMigrateProcessesAsyncBatchAndMarksCompletedWithErrors(): void
@@ -121,7 +144,7 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
             ->method('insertBatch')
             ->with(
                 'import_records',
-                $this->callback(function (array $records) use (&$persistedRecords): bool {
+                $this->callback(function (array $records) use (&$persistedRecords, &$generatedId): bool {
                     $persistedRecords = $records;
 
                     if (count($records) !== 1) {
@@ -137,6 +160,7 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
                     $this->assertSame('session-uuid-1', $record['import_session_id']);
                     $this->assertSame('value', $record['payload']);
                     $this->assertTrue(Uuid::isValid($record['id']));
+                    $generatedId = $record['id'];
                     $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $record['created_at']);
                     $this->assertSame($record['created_at'], $record['updated_at']);
 
@@ -152,18 +176,8 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
                 'errors' => $errors,
             ]);
 
-        $idMappingService->expects($this->once())
-            ->method('storeBatch')
-            ->with(
-                'import_records',
-                $this->callback(function (array $mappings) use (&$generatedId): bool {
-                    $generatedId = $mappings['legacy-record-1'] ?? null;
-
-                    return is_string($generatedId) && Uuid::isValid($generatedId);
-                }),
-                'contract-1',
-                'batch-1'
-            );
+        $idMappingService->expects($this->never())
+            ->method('storeBatch');
 
         $batchService->expects($this->once())
             ->method('markCompleted')
@@ -224,6 +238,7 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
                 })
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload, $capturedStatus);
         $controller = $this->createController(
             $request,
             $insertService,
@@ -232,18 +247,20 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
             $validatorFactory,
             $auditService
         );
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame('batch-1', $result['migration_batch_id']);
-        $this->assertSame('import_records', $result['entity']);
-        $this->assertSame(1, $result['total_received']);
-        $this->assertSame('completed_with_errors', $result['status']);
-        $this->assertSame(0, $result['inserted']);
-        $this->assertSame(1, $result['failed']);
-        $this->assertSame($errors, $result['errors']);
-        $this->assertSame(['legacy-record-1' => $generatedId], $result['id_mappings']);
-        $this->assertSame('/api/v1/migration/status/batch-1', $result['status_url']);
+        $this->assertSame('batch-1', $capturedPayload['migration_batch_id']);
+        $this->assertSame('import_records', $capturedPayload['entity']);
+        $this->assertSame(1, $capturedPayload['total_received']);
+        $this->assertSame('completed_with_errors', $capturedPayload['status']);
+        $this->assertSame(0, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['failed']);
+        $this->assertSame($errors, $capturedPayload['errors']);
+        $this->assertSame(['legacy-record-1' => $generatedId], $capturedPayload['id_mappings']);
+        $this->assertSame('/api/v1/migration/status/batch-1', $capturedPayload['status_url']);
+        $this->assertSame(202, $capturedStatus);
         $this->assertSame($generatedId, $persistedRecords[0]['id']);
     }
 
@@ -422,6 +439,7 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
                 })
             );
 
+        $responseMock = $this->createResponseMock($capturedPayload, $capturedStatus);
         $controller = $this->createController(
             $request,
             $insertService,
@@ -430,19 +448,21 @@ final class ImportRecordMigrationControllerTest extends UnitTestCase
             $validatorFactory,
             $auditService
         );
+        $this->injectProperty($controller, 'response', $responseMock);
 
-        $result = $controller->migrate();
+        $controller->migrate();
 
-        $this->assertSame('batch-2', $result['migration_batch_id']);
-        $this->assertSame(2, $result['total_received']);
-        $this->assertSame('completed', $result['status']);
-        $this->assertSame(1, $result['inserted']);
-        $this->assertSame(1, $result['skipped']);
-        $this->assertSame(0, $result['failed']);
+        $this->assertSame('batch-2', $capturedPayload['migration_batch_id']);
+        $this->assertSame(2, $capturedPayload['total_received']);
+        $this->assertSame('completed', $capturedPayload['status']);
+        $this->assertSame(1, $capturedPayload['inserted']);
+        $this->assertSame(1, $capturedPayload['skipped']);
+        $this->assertSame(0, $capturedPayload['failed']);
         $this->assertSame([
             'legacy-existing' => 'existing-uuid-1',
             'legacy-new' => $generatedId,
-        ], $result['id_mappings']);
+        ], $capturedPayload['id_mappings']);
+        $this->assertSame(202, $capturedStatus);
     }
 
     private function createController(
