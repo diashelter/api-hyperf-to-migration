@@ -85,7 +85,7 @@ class ImportMigrationController extends AbstractMigrationController
 
     protected function getMaxBatchSize(): int
     {
-        return 300;
+        return 100;
     }
 
     protected function getConnection(): string
@@ -106,6 +106,7 @@ class ImportMigrationController extends AbstractMigrationController
 
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
+        $record = $this->resolveContractIdFK($record, $contractId);
         if (! empty($record['legacy_user_id'])) {
             $record['user_id'] = $this->idMappingService->resolve('users', $record['legacy_user_id'], $contractId) ?? $record['user_id'] ?? null;
             unset($record['legacy_user_id']);
@@ -116,7 +117,6 @@ class ImportMigrationController extends AbstractMigrationController
             unset($record['legacy_company_id']);
         }
 
-        $record = $this->resolveContractIdFK($record, $contractId);
 
         if (! empty($record['legacy_company_layout_id'])) {
             $record['company_layout_id'] = $this->idMappingService->resolve('company_layout', $record['legacy_company_layout_id'], $contractId) ?? $record['company_layout_id'] ?? null;

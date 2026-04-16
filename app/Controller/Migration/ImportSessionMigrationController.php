@@ -82,7 +82,7 @@ class ImportSessionMigrationController extends AbstractMigrationController
 
     protected function getMaxBatchSize(): int
     {
-        return 300;
+        return 100;
     }
 
     protected function getConnection(): string
@@ -95,8 +95,7 @@ class ImportSessionMigrationController extends AbstractMigrationController
         return [
             'legacy_layout_id' => 'required|integer',
             'legacy_import_id' => 'nullable|string',
-            'original_file_name' => 'required|string|max:255',
-            'file_name' => 'required|string',
+            'file_name' => 'nullable|string',
             'date_to_create' => 'nullable|string',
             'size' => 'nullable|integer',
         ];

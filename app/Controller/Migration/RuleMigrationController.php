@@ -86,7 +86,7 @@ class RuleMigrationController extends AbstractMigrationController
 
     protected function getMaxBatchSize(): int
     {
-        return 500;
+        return 1000;
     }
 
     protected function getConnection(): string
@@ -139,14 +139,14 @@ class RuleMigrationController extends AbstractMigrationController
         $record = $this->resolveContractIdFK($record, $contractId);
 
         $record['token'] = $this->parseTokenToWeb($record['token'], $record['layout_id'] ?? null);
-        $record['cpf_cnpj'] = $record['cpf_cnpj'] ? str_replace(['field_cpfcnpj'], 'field_cpf_cnpj', $record['cpf_cnpj']) : "NULLIF(#field_cpf_cnpj#,'') IS NULL";
-        $record['client_supplier'] = $record['client_supplier'] ? str_replace(['field_clifor'], 'field_client_supplier', $record['client_supplier']) : "NULLIF(#field_client_supplier#,'') IS NULL";
-        $record['history'] = $record['history'] ? str_replace(['fnc_semelhante'], 'fnc_similar', $record['history']) : "NULLIF(#field_history#,'') IS NULL";
-        $record['history'] = $record['history'] ? str_replace(['field_historico'], 'field_history', $record['history']) : "NULLIF(#field_history#,'') IS NULL";
-        $record['bank'] = $record['bank'] ? str_replace(['field_banco'], 'field_bank', $record['bank']) : "NULLIF(#field_bank#,'') IS NULL";
-        $record['filial'] = $record['filial'] ? str_replace(['field_filial'], 'field_filial', $record['filial']) : "NULLIF(#field_filial#,'') IS NULL";
-        $record['additional_information'] = $record['additional_information'] ? str_replace(['field_infadicional'], 'field_additional_information', $record['additional_information']) : "NULLIF(#field_additional_information#,'') IS NULL";
-        $record['additional_information_3'] = $record['additional_information_3'] ? str_replace(['field_infadicional_compl'], 'field_additional_information_3', $record['additional_information_3']) : "NULLIF(#field_additional_information_3#,'') IS NULL";
+        $record = $this->replaceValuesWithNullIf($record, 'cpf_cnpj', 'field_cpfcnpj');
+        $record = $this->replaceValuesWithNullIf($record, 'client_supplier', 'field_clifor');
+        $record = $this->replaceValuesWithNullIf($record, 'history', 'fnc_semelhante');
+        $record = $this->replaceValuesWithNullIf($record, 'history', 'field_historico');
+        $record = $this->replaceValuesWithNullIf($record, 'bank', 'field_banco');
+        $record = $this->replaceValuesWithNullIf($record, 'filial', 'field_filial');
+        $record = $this->replaceValuesWithNullIf($record, 'additional_information', 'field_infadicional');
+        $record = $this->replaceValuesWithNullIf($record, 'additional_information_3', 'field_infadicional_compl');
 
         return $record;
     }
@@ -178,5 +178,15 @@ class RuleMigrationController extends AbstractMigrationController
             $parts[8] === '0' ? 'f' : 't',
             'f'
         );
+    }
+
+    private function replaceValuesWithNullIf(array $record, string $field, string $placeholder): array
+    {
+        if (isset($record[$field]) && $record[$field] !== '') {
+            $record[$field] = str_replace([$placeholder], "field_{$field}", $record[$field]);
+        } else {
+            $record[$field] = "NULLIF(#field_{$field}#,'') IS NULL";
+        }
+        return $record;
     }
 }
