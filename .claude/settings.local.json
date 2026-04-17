@@ -49,7 +49,18 @@
       "Bash(python3 -m json.tool)",
       "Bash(git stash:*)",
       "Bash(xxd)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(rtk read *)",
+      "Bash(rtk find *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk docker *)",
+      "Bash(rtk git *)",
+      "Bash(rtk wc *)",
+      "Bash(rtk curl *)",
+      "Bash(mkdir -p /tmp/bench)",
+      "Bash(php -r ' *)",
+      "Bash(php *)"
     ]
   }
 }

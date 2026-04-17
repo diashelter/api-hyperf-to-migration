@@ -147,11 +147,31 @@ class ContractUserMigrationController
             'contract_admin' => 'nullable|boolean',
         ];
 
+        // Pré-verificar idempotência via migration_id_mappings
+        $allLegacyIds = array_values(array_filter(array_column($batch, 'legacy_id')));
+        $alreadyMigrated = ! empty($allLegacyIds)
+            ? $this->idMappingService->resolveMany('contract_users', $allLegacyIds, $contractId)
+            : [];
+
         $validationErrors = [];
         $validationRecordLogs = [];
         $records = [];
+        $recordLegacyIds = [];
         foreach ($batch as $index => $record) {
-            // 1. Resolver legacy FKs antes da validação
+            $legacyId = isset($record['legacy_id']) ? (string) $record['legacy_id'] : null;
+
+            // 1. Pular registros já migrados
+            if ($legacyId !== null && isset($alreadyMigrated[$legacyId])) {
+                $validationRecordLogs[] = [
+                    'legacy_id' => $legacyId,
+                    'new_id' => null,
+                    'status' => 'skipped_duplicate',
+                    'error_message' => null,
+                ];
+                continue;
+            }
+
+            // 2. Resolver legacy FKs antes da validação
             if (! empty($record['legacy_user_id'])) {
                 $record['user_id'] = $this->idMappingService->resolve('users', $record['legacy_user_id'], $contractId) ?? $record['user_id'] ?? null;
                 unset($record['legacy_user_id']);
@@ -167,20 +187,20 @@ class ContractUserMigrationController
                 unset($record['legacy_role_id']);
             }
 
-            // 2. Limpar campos que não pertencem à pivot
+            // 3. Limpar campos que não pertencem à pivot
             unset($record['legacy_id'], $record['id'], $record['created_at'], $record['updated_at']);
 
-            // 3. Validar UUIDs resolvidos
+            // 4. Validar UUIDs resolvidos
             $validator = $this->validatorFactory->make($record, $rules);
             if ($validator->fails()) {
                 $error = [
                     'index' => $index,
-                    'legacy_id' => null,
+                    'legacy_id' => $legacyId,
                     'validation_errors' => $validator->errors()->toArray(),
                 ];
                 $validationErrors[] = $error;
                 $validationRecordLogs[] = [
-                    'legacy_id' => null,
+                    'legacy_id' => $legacyId,
                     'new_id' => null,
                     'status' => 'validation_error',
                     'error_message' => json_encode(
@@ -192,10 +212,11 @@ class ContractUserMigrationController
             }
 
             $records[] = $record;
+            $recordLegacyIds[] = $legacyId;
         }
 
         $inserted = 0;
-        $skipped = 0;
+        $skipped = \count($alreadyMigrated);
         $failed = 0;
         $errors = [];
         $recordLogs = $validationRecordLogs;
@@ -206,13 +227,25 @@ class ContractUserMigrationController
                 $connection->beginTransaction();
                 $inserted = $connection->table('contract_user')->insertOrIgnore($records);
                 $connection->commit();
-                $skipped = max(0, \count($records) - $inserted);
+                $skipped += max(0, \count($records) - $inserted);
 
-                foreach ($records as $index => $record) {
+                // Armazenar mapeamentos para garantir idempotência nas próximas chamadas
+                $mappings = [];
+                foreach ($recordLegacyIds as $i => $legacyId) {
+                    if ($legacyId !== null) {
+                        $rec = $records[$i];
+                        $mappings[$legacyId] = ($rec['user_id'] ?? '') . ':' . ($rec['contract_id'] ?? '');
+                    }
+                }
+                if (! empty($mappings)) {
+                    $this->idMappingService->storeBatch('contract_users', $mappings, $contractId, $requestId);
+                }
+
+                foreach ($recordLegacyIds as $legacyId) {
                     $recordLogs[] = [
-                        'legacy_id' => null,
+                        'legacy_id' => $legacyId,
                         'new_id' => null,
-                        'status' => $index < $inserted ? 'inserted' : 'skipped_duplicate',
+                        'status' => 'inserted',
                         'error_message' => null,
                     ];
                 }
@@ -221,9 +254,9 @@ class ContractUserMigrationController
                 $failed = \count($records);
                 $errors[] = ['message' => $e->getMessage()];
 
-                foreach ($records as $record) {
+                foreach ($recordLegacyIds as $legacyId) {
                     $recordLogs[] = [
-                        'legacy_id' => null,
+                        'legacy_id' => $legacyId,
                         'new_id' => null,
                         'status' => 'failed',
                         'error_message' => $e->getMessage(),

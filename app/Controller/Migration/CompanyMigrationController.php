@@ -122,6 +122,15 @@ class CompanyMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_contract_id' => 'contracts',
+            'legacy_plan_id' => 'plans',
+            'legacy_rules_sharing_id' => 'rules_sharings',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         $record = $this->resolveContractIdFK($record, $contractId);

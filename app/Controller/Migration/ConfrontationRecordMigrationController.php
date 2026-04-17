@@ -110,6 +110,15 @@ class ConfrontationRecordMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_confrontation_id' => 'confrontations',
+            'legacy_import_record_id' => 'import_records',
+            'legacy_import_id' => 'imports',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_confrontation_id'])) {

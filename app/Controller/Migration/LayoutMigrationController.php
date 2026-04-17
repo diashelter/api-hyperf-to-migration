@@ -150,6 +150,14 @@ class LayoutMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_contract_id' => 'contracts',
+            'reference_layout' => 'layouts',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         // // code é gerado automaticamente pelo banco — não aceitar do payload

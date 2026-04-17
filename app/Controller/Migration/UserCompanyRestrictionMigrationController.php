@@ -105,6 +105,14 @@ class UserCompanyRestrictionMigrationController extends AbstractMigrationControl
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_user_id' => 'users',
+            'legacy_company_id' => 'companies',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_user_id'])) {

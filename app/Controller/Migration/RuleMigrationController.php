@@ -124,6 +124,15 @@ class RuleMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_company_id' => 'companies',
+            'legacy_layout_id' => 'layouts',
+            'legacy_contract_id' => 'contracts',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_company_id'])) {
@@ -146,9 +155,7 @@ class RuleMigrationController extends AbstractMigrationController
         $record = $this->replaceValuesWithNullIf($record, 'bank', 'field_banco');
         $record = $this->replaceValuesWithNullIf($record, 'filial', 'field_filial');
         $record = $this->replaceValuesWithNullIf($record, 'additional_information', 'field_infadicional');
-        $record = $this->replaceValuesWithNullIf($record, 'additional_information_3', 'field_infadicional_compl');
-
-        return $record;
+        return $this->replaceValuesWithNullIf($record, 'additional_information_3', 'field_infadicional_compl');
     }
 
     private function parseTokenToWeb(string $legacyToken, $layout_id): string

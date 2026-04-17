@@ -13,16 +13,21 @@ declare(strict_types=1);
 namespace App\Exception\Handler;
 
 use App\Exception\ApiException;
+use App\Service\DiscordNotificationService;
+use Hyperf\Context\Context;
 use Hyperf\Contract\StdoutLoggerInterface;
 use Hyperf\ExceptionHandler\ExceptionHandler;
 use Hyperf\HttpMessage\Stream\SwooleStream;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
 
 class AppExceptionHandler extends ExceptionHandler
 {
-    public function __construct(protected StdoutLoggerInterface $logger)
-    {
+    public function __construct(
+        protected StdoutLoggerInterface $logger,
+        protected DiscordNotificationService $discordService,
+    ) {
     }
 
     public function handle(Throwable $throwable, ResponseInterface $response): ResponseInterface
@@ -31,15 +36,20 @@ class AppExceptionHandler extends ExceptionHandler
         $this->logger->error($throwable->getTraceAsString());
 
         if ($throwable instanceof ApiException) {
+            $httpStatus = $throwable->getHttpStatus();
+            $this->notifyToDiscord($throwable, $httpStatus);
+
             return $this->problem(
                 $response,
-                $throwable->getHttpStatus(),
+                $httpStatus,
                 $throwable->getTitle(),
                 $throwable->getDetail(),
                 $throwable->getType(),
                 $throwable->getErrors(),
             );
         }
+
+        $this->notifyToDiscord($throwable, 500);
 
         return $this->problem(
             $response,
@@ -52,6 +62,36 @@ class AppExceptionHandler extends ExceptionHandler
     public function isValid(Throwable $throwable): bool
     {
         return true;
+    }
+
+    private function notifyToDiscord(Throwable $throwable, int $httpStatus): void
+    {
+        try {
+            /** @var null|ServerRequestInterface $request */
+            $request = Context::get(ServerRequestInterface::class);
+            $contractId = (string) ($request?->getAttribute('contract_id') ?? 'unknown');
+            $entity = $this->extractEntityFromUri($request?->getUri()->getPath() ?? '');
+
+            $batchSample = [];
+            if ($httpStatus === 500 && $request !== null) {
+                $body = $request->getParsedBody();
+                $batch = is_array($body) ? ($body['batch'] ?? []) : [];
+                $batchSample = array_slice((array) $batch, 0, 5);
+            }
+
+            $this->discordService->notifyException($entity, $contractId, $httpStatus, $throwable, $batchSample);
+        } catch (Throwable) {
+            // Never let notification errors bubble up
+        }
+    }
+
+    private function extractEntityFromUri(string $path): string
+    {
+        if (preg_match('#/api/v\d+/migration/([^/?]+)#', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return 'unknown';
     }
 
     private function problem(

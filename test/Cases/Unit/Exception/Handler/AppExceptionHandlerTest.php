@@ -14,6 +14,7 @@ namespace HyperfTest\Cases\Unit\Exception\Handler;
 
 use App\Exception\ApiException;
 use App\Exception\Handler\AppExceptionHandler;
+use App\Service\DiscordNotificationService;
 use Hyperf\Contract\StdoutLoggerInterface;
 use Hyperf\HttpMessage\Stream\SwooleStream;
 use HyperfTest\UnitTestCase;
@@ -59,7 +60,7 @@ final class AppExceptionHandlerTest extends UnitTestCase
             }))
             ->willReturnSelf();
 
-        $handler = new AppExceptionHandler($logger);
+        $handler = new AppExceptionHandler($logger, $this->createStub(DiscordNotificationService::class));
         $result = $handler->handle($exception, $response);
 
         $this->assertSame($response, $result);
@@ -84,13 +85,13 @@ final class AppExceptionHandlerTest extends UnitTestCase
             }))
             ->willReturnSelf();
 
-        $handler = new AppExceptionHandler($logger);
+        $handler = new AppExceptionHandler($logger, $this->createStub(DiscordNotificationService::class));
         $handler->handle($exception, $response);
     }
 
     public function testIsValidAlwaysReturnsTrue(): void
     {
-        $handler = new AppExceptionHandler($this->createStub(StdoutLoggerInterface::class));
+        $handler = new AppExceptionHandler($this->createStub(StdoutLoggerInterface::class), $this->createStub(DiscordNotificationService::class));
 
         $this->assertTrue($handler->isValid($this->createMock(Throwable::class)));
     }

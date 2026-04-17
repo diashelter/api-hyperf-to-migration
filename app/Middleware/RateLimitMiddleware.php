@@ -45,20 +45,18 @@ class RateLimitMiddleware implements MiddlewareInterface
             : (int) env('MIGRATION_RATE_LIMIT', 60);
 
         $key = "migration_rate:{$contractId}:" . ($isBulk ? 'bulk' : 'standard');
-        $current = (int) $this->redis->get($key);
+        $current = (int) $this->redis->incr($key);
 
-        if ($current >= $limit) {
+        if ($current === 1) {
+            $this->redis->expire($key, 60);
+        }
+
+        if ($current > $limit) {
             return $this->response->json([
                 'error' => 'Too Many Requests',
                 'message' => "Rate limit exceeded. Max {$limit} requests per minute.",
                 'retry_after' => $this->redis->ttl($key),
             ])->withStatus(429);
-        }
-
-        if ($current === 0) {
-            $this->redis->setex($key, 60, '1');
-        } else {
-            $this->redis->incr($key);
         }
 
         return $handler->handle($request);

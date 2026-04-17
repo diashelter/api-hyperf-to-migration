@@ -14,6 +14,7 @@ namespace App\Controller;
 
 use App\Exception\BatchTooLargeException;
 use App\Exception\EmptyBatchException;
+use App\Service\DiscordNotificationService;
 use App\Service\IdMappingService;
 use App\Service\MigrationAuditService;
 use App\Service\MigrationBatchService;
@@ -51,6 +52,9 @@ abstract class AbstractMigrationController
 
     #[Inject]
     protected ?MigrationAuditService $auditService = null;
+
+    #[Inject]
+    protected ?DiscordNotificationService $discordService = null;
 
     abstract protected function getTable(): string;
 
@@ -124,6 +128,7 @@ abstract class AbstractMigrationController
      */
     protected function syncMigrate(): PsrResponseInterface
     {
+        $startTime = microtime(true);
         $requestId = Uuid::uuid4()->toString();
         $rawBatch = $this->request->input('batch', []);
 
@@ -186,7 +191,17 @@ abstract class AbstractMigrationController
             );
         }
 
-        return $this->respond($payload, $this->resolveSyncStatus($payload));
+        $statusCode = $this->resolveSyncStatus($payload);
+        $processingTimeMs = (int) ((microtime(true) - $startTime) * 1000);
+        $this->discordService?->notifyMigration(
+            $entity,
+            $contractId,
+            $statusCode,
+            array_merge($payload, ['processing_time_ms' => $processingTimeMs]),
+            array_slice($rawBatch, 0, 5)
+        );
+
+        return $this->respond($payload, $statusCode);
     }
 
     /**
@@ -195,6 +210,7 @@ abstract class AbstractMigrationController
      */
     protected function asyncMigrate(): PsrResponseInterface
     {
+        $startTime = microtime(true);
         $requestId = Uuid::uuid4()->toString();
         $rawBatch = $this->request->input('batch', []);
         $contractId = $this->getContractId();
@@ -284,6 +300,15 @@ abstract class AbstractMigrationController
             );
         }
 
+        $processingTimeMs = (int) ((microtime(true) - $startTime) * 1000);
+        $this->discordService?->notifyMigration(
+            $entity,
+            $contractId,
+            202,
+            array_merge($payload, ['processing_time_ms' => $processingTimeMs]),
+            array_slice($rawBatch, 0, 5)
+        );
+
         return $this->respond($payload, 202)
             ->withHeader('Location', $statusUrl);
     }
@@ -337,6 +362,66 @@ abstract class AbstractMigrationController
     }
 
     /**
+     * Mapeia os campos `legacy_*` do payload para as entidades correspondentes
+     * em `migration_id_mappings`. Usado para pré-aquecer o cache de FKs
+     * antes de `resolveForeignKeys()` ser chamado em loop.
+     *
+     * Override em cada controller que usa `idMappingService->resolve()`.
+     *
+     * Exemplo:
+     *   return [
+     *     'legacy_company_id' => 'companies',
+     *     'legacy_layout_id'  => 'layouts',
+     *   ];
+     *
+     * `resolveContractIdFK` é coberto automaticamente (prewarm da entidade
+     * `contracts` é disparado para todo request com contract_id).
+     */
+    protected function getForeignKeyMap(): array
+    {
+        return [];
+    }
+
+    /**
+     * Coleta todos os legacy_ids do batch por entidade e dispara um único
+     * `resolveMany` por entidade, populando o cache do IdMappingService.
+     * As chamadas subsequentes de `resolve()` em `resolveForeignKeys()`
+     * passam a servir do cache em vez de gerar uma query por registro.
+     */
+    protected function prefetchForeignKeys(array $batch, string $contractId): void
+    {
+        if ($contractId !== '') {
+            $this->idMappingService->prewarm('contracts', [$contractId], $contractId);
+        }
+
+        $fkMap = $this->getForeignKeyMap();
+
+        if (empty($fkMap) || empty($batch)) {
+            return;
+        }
+
+        $legacyIdsByEntity = [];
+        foreach ($fkMap as $entity) {
+            $legacyIdsByEntity[$entity] = [];
+        }
+
+        foreach ($batch as $record) {
+            foreach ($fkMap as $field => $entity) {
+                if (! empty($record[$field])) {
+                    $legacyIdsByEntity[$entity][] = (string) $record[$field];
+                }
+            }
+        }
+
+        foreach ($legacyIdsByEntity as $entity => $legacyIds) {
+            if (empty($legacyIds)) {
+                continue;
+            }
+            $this->idMappingService->prewarm($entity, array_values(array_unique($legacyIds)), $contractId);
+        }
+    }
+
+    /**
      * Resolve contract_id a partir do legacy_contract_id do payload ou,
      * como fallback, resolve o próprio $contractId (X-Contract-Id legado)
      * via migration_id_mappings para obter o UUID real do contrato.
@@ -364,6 +449,8 @@ abstract class AbstractMigrationController
         $preparedBatch = [];
         $idMappings = [];
         $recordContexts = [];
+
+        $this->prefetchForeignKeys($batch, $contractId);
 
         foreach ($batch as $record) {
             if ($normalizeStrings) {

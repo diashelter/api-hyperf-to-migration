@@ -104,6 +104,16 @@ class ImportMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_contract_id' => 'contracts',
+            'legacy_user_id' => 'users',
+            'legacy_company_id' => 'companies',
+            'legacy_company_layout_id' => 'company_layout',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         $record = $this->resolveContractIdFK($record, $contractId);
@@ -116,7 +126,6 @@ class ImportMigrationController extends AbstractMigrationController
             $record['company_id'] = $this->idMappingService->resolve('companies', $record['legacy_company_id'], $contractId) ?? $record['company_id'] ?? null;
             unset($record['legacy_company_id']);
         }
-
 
         if (! empty($record['legacy_company_layout_id'])) {
             $record['company_layout_id'] = $this->idMappingService->resolve('company_layout', $record['legacy_company_layout_id'], $contractId) ?? $record['company_layout_id'] ?? null;

@@ -163,6 +163,14 @@ DESC,
         return Uuid::uuid7()->toString();
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_import_id' => 'imports',
+            'legacy_import_session_id' => 'import_sessions',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         // --- Resolução de FKs legadas ---

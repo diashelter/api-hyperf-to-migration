@@ -99,6 +99,15 @@ class PeopleVinculatedMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_people_id' => 'peoples',
+            'legacy_company_id' => 'companies',
+            'legacy_rules_sharing_id' => 'rules_sharings',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         $record['people_id'] = null;

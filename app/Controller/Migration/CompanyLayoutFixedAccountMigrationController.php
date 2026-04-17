@@ -27,23 +27,51 @@ use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 #[HyperfServer('http')]
 class CompanyLayoutFixedAccountMigrationController extends AbstractMigrationController
 {
+    private const DEBIT_FIELD_MAP = [
+        'Valor' => 'value',
+        'Juros' => 'fees',
+        'Multa' => 'fine',
+        'Desconto' => 'discount',
+        'Outros' => 'others',
+        'Devolução' => 'refunds',
+        'Tarifas' => 'rates',
+    ];
+
+    private const CREDIT_FIELD_MAP = [
+        'Valor' => 'value',
+        'Juros' => 'interest',
+        'Multa' => 'fine',
+        'Desconto' => 'discount',
+        'Outros' => 'others',
+        'Devolução' => 'refunds',
+        'Tarifas' => 'rates',
+    ];
+
     #[OA\Post(
         path: '/api/v1/migration/company-layout-fixed-accounts',
         summary: 'Migrar contas fixas de vínculos empresa × layout',
         description: <<<'DESC'
         Insere registros de contas fixas em `company_layout_fixed_accounts` em lote (síncrono). Fase 6 da migração — depende de `company_layout` já migrado. Max batch: 200.
 
-        **Mapeamento do legado (`contas_fixas_modelo`):**
-        - `D.Valor` → `value_debit` / `value_code_history_debit` / `value_history_debit`
-        - `D.Juros` → `fees_debit` / `fees_code_history_debit` / `fees_history_debit`
-        - `D.Multa` → `fine_debit` / `fine_code_history_debit` / `fine_history_debit`
-        - `D.Desconto` → `discount_debit` / `discount_code_history_debit` / `discount_history_debit`
-        - `D.Outros` → `others_debit` / `others_code_history_debit` / `others_history_debit`
-        - `D.Devolução` → `refunds_debit` / `refunds_code_history_debit` / `refunds_history_debit`
-        - `D.Taxas` → `rates_debit` / `rates_code_history_debit` / `rates_history_debit`
-        - `D.Tarifas` → **descartado** (sem coluna correspondente)
-        - Mesmo padrão para `C.*` → `*_credit`
-        - `conta_fixa` (legado) → `bank`
+        **Payload por registro:**
+        - `legacy_id` (required): identificador legado do vínculo
+        - `legacy_company_layout_id` (required): FK legada resolvida para `company_layout_id`
+        - `bank_account` (nullable): código da conta bancária (`conta_fixa` no legado)
+        - `contas_fixas_modelo` (required): JSON string do legado contendo arrays `D` (débito) e `C` (crédito). O parse e expansão em colunas acontece no controller.
+
+        **Mapeamento do JSON `contas_fixas_modelo` para colunas:**
+
+        Cada item tem `{campo, conta, cod_hist, hist_person}`. `conta`→`{prefix}_{side}`, `cod_hist`→`{prefix}_code_history_{side}`, `hist_person`→`{prefix}_history_{side}`. Strings vazias viram `null`.
+
+        Prefixos (`D` → `_debit`, `C` → `_credit`):
+        - `Valor` → `value`
+        - `Juros` → `fees` (em `D`) / `interest` (em `C`)
+        - `Multa` → `fine`
+        - `Desconto` → `discount`
+        - `Outros` → `others`
+        - `Devolução` → `refunds`
+        - `Tarifas` → `rates`
+        - `Taxas` → **descartado** (sem coluna correspondente)
 
         **Resolução de FKs legadas:**
         - `legacy_company_layout_id` → resolve via `migration_id_mappings` (entidade `company_layout`)
@@ -60,14 +88,10 @@ class CompanyLayoutFixedAccountMigrationController extends AbstractMigrationCont
                 example: [
                     'batch' => [
                         [
-                            'legacy_id' => 'CFA-001',
+                            'legacy_id' => '292',
                             'legacy_company_layout_id' => 'CL-001',
-                            'bank' => '84',
-                            'is_default_account' => false,
-                            'value_debit' => '1.1.01',
-                            'value_code_history_debit' => '001',
-                            'value_history_debit' => 'RECEBIMENTO',
-                            'value_credit' => '4.1.01',
+                            'bank_account' => '84',
+                            'contas_fixas_modelo' => '{"D":[{"campo":"Valor","conta":"1.1.01","la":"","cod_hist":"001","hist_person":"RECEBIMENTO"},{"campo":"Juros","conta":"","la":"","cod_hist":"","hist_person":""}],"C":[{"campo":"Valor","conta":"4.1.01","la":"","cod_hist":"","hist_person":""},{"campo":"Juros","conta":"4.1.02","la":"","cod_hist":"","hist_person":""}]}',
                         ],
                     ],
                 ]
@@ -113,53 +137,51 @@ class CompanyLayoutFixedAccountMigrationController extends AbstractMigrationCont
     protected function validationRules(): array
     {
         return [
-            'is_default_account' => 'nullable|boolean',
-            'bank' => 'nullable|string|max:100',
+            'legacy_id' => 'required|string|max:255',
+            'legacy_company_layout_id' => 'required|string|max:255',
             'bank_account' => 'nullable|string|max:100',
-            // debit
-            'value_debit' => 'nullable|string|max:50',
-            'value_code_history_debit' => 'nullable|string|max:50',
-            'value_history_debit' => 'nullable|string|max:50',
-            'fees_debit' => 'nullable|string|max:50',
-            'fees_code_history_debit' => 'nullable|string|max:50',
-            'fees_history_debit' => 'nullable|string|max:50',
-            'fine_debit' => 'nullable|string|max:50',
-            'fine_code_history_debit' => 'nullable|string|max:50',
-            'fine_history_debit' => 'nullable|string|max:50',
-            'discount_debit' => 'nullable|string|max:50',
-            'discount_code_history_debit' => 'nullable|string|max:50',
-            'discount_history_debit' => 'nullable|string|max:50',
-            'others_debit' => 'nullable|string|max:50',
-            'others_code_history_debit' => 'nullable|string|max:50',
-            'others_history_debit' => 'nullable|string|max:50',
-            'refunds_debit' => 'nullable|string|max:50',
-            'refunds_code_history_debit' => 'nullable|string|max:50',
-            'refunds_history_debit' => 'nullable|string|max:50',
-            'rates_debit' => 'nullable|string|max:50',
-            'rates_code_history_debit' => 'nullable|string|max:50',
-            'rates_history_debit' => 'nullable|string|max:50',
-            // credit
-            'value_credit' => 'nullable|string|max:50',
-            'value_code_history_credit' => 'nullable|string|max:50',
-            'value_history_credit' => 'nullable|string|max:50',
-            'fees_credit' => 'nullable|string|max:50',
-            'fees_code_history_credit' => 'nullable|string|max:50',
-            'fees_history_credit' => 'nullable|string|max:50',
-            'fine_credit' => 'nullable|string|max:50',
-            'fine_code_history_credit' => 'nullable|string|max:50',
-            'fine_history_credit' => 'nullable|string|max:50',
-            'discount_credit' => 'nullable|string|max:50',
-            'discount_code_history_credit' => 'nullable|string|max:50',
-            'discount_history_credit' => 'nullable|string|max:50',
-            'others_credit' => 'nullable|string|max:50',
-            'others_code_history_credit' => 'nullable|string|max:50',
-            'others_history_credit' => 'nullable|string|max:50',
-            'refunds_credit' => 'nullable|string|max:50',
-            'refunds_code_history_credit' => 'nullable|string|max:50',
-            'refunds_history_credit' => 'nullable|string|max:50',
-            'rates_credit' => 'nullable|string|max:50',
-            'rates_code_history_credit' => 'nullable|string|max:50',
-            'rates_history_credit' => 'nullable|string|max:50',
+            'contas_fixas_modelo' => 'required|string',
+        ];
+    }
+
+    protected function filterValidRecords(array $batch): array
+    {
+        $rules = $this->validationRules();
+        $validRecords = [];
+        $validationErrors = [];
+
+        foreach ($batch as $index => $record) {
+            $validator = $this->validatorFactory->make($record, $rules);
+
+            if ($validator->fails()) {
+                $validationErrors[] = [
+                    'index' => $index,
+                    'legacy_id' => $record['legacy_id'] ?? null,
+                    'validation_errors' => $validator->errors()->toArray(),
+                ];
+                continue;
+            }
+
+            $expanded = $this->expandContasFixasModelo($record);
+            if ($expanded === null) {
+                $validationErrors[] = [
+                    'index' => $index,
+                    'legacy_id' => $record['legacy_id'] ?? null,
+                    'validation_errors' => ['contas_fixas_modelo' => ['invalid JSON or missing D/C keys']],
+                ];
+                continue;
+            }
+
+            $validRecords[] = $expanded;
+        }
+
+        return [$validRecords, $validationErrors];
+    }
+
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_company_layout_id' => 'company_layout',
         ];
     }
 
@@ -171,5 +193,60 @@ class CompanyLayoutFixedAccountMigrationController extends AbstractMigrationCont
         }
 
         return $record;
+    }
+
+    private function expandContasFixasModelo(array $record): ?array
+    {
+        $raw = $record['contas_fixas_modelo'] ?? null;
+        if (! \is_string($raw) || $raw === '') {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        if (json_last_error() !== JSON_ERROR_NONE || ! \is_array($decoded)) {
+            return null;
+        }
+        if (! isset($decoded['D'], $decoded['C']) || ! \is_array($decoded['D']) || ! \is_array($decoded['C'])) {
+            return null;
+        }
+
+        $record = $this->applySideMapping($record, $decoded['D'], self::DEBIT_FIELD_MAP, 'debit');
+        $record = $this->applySideMapping($record, $decoded['C'], self::CREDIT_FIELD_MAP, 'credit');
+
+        unset($record['contas_fixas_modelo']);
+
+        return $record;
+    }
+
+    /**
+     * @param array<int, mixed> $items
+     * @param array<string, string> $fieldMap
+     */
+    private function applySideMapping(array $record, array $items, array $fieldMap, string $side): array
+    {
+        foreach ($items as $item) {
+            if (! \is_array($item) || ! isset($item['campo'])) {
+                continue;
+            }
+            $prefix = $fieldMap[$item['campo']] ?? null;
+            if ($prefix === null) {
+                continue;
+            }
+            $record[$prefix . '_' . $side] = $this->nullIfEmpty($item['conta'] ?? null);
+            $record[$prefix . '_code_history_' . $side] = $this->nullIfEmpty($item['cod_hist'] ?? null);
+            $record[$prefix . '_history_' . $side] = $this->nullIfEmpty($item['hist_person'] ?? null);
+        }
+
+        return $record;
+    }
+
+    private function nullIfEmpty(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $trimmed = trim((string) $value);
+
+        return $trimmed === '' ? null : $trimmed;
     }
 }

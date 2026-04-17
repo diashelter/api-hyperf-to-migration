@@ -94,6 +94,13 @@ class PlanItemMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_plan_id' => 'plans',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_plan_id'])) {

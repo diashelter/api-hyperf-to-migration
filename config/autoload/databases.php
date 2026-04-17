@@ -24,8 +24,8 @@ return [
         'prefix' => env('DB_PREFIX', ''),
         'schema' => 'public',
         'pool' => [
-            'min_connections' => (int) env('DB_POOL_MIN', 2),
-            'max_connections' => (int) env('DB_POOL_MAX', 20),
+            'min_connections' => (int) env('DB_POOL_MIN', 4),
+            'max_connections' => (int) env('DB_POOL_MAX', 40),
             'connect_timeout' => 10.0,
             'wait_timeout' => 3.0,
             'heartbeat' => -1,
@@ -51,12 +51,12 @@ return [
         'prefix' => '',
         'schema' => 'public',
         'pool' => [
-            'min_connections' => 1,
-            'max_connections' => 10,
+            'min_connections' => (int) env('DB_WEB_POOL_MIN', 5),
+            'max_connections' => (int) env('DB_WEB_POOL_MAX', 30),
             'connect_timeout' => 10.0,
             'wait_timeout' => 3.0,
             'heartbeat' => -1,
-            'max_idle_time' => 60.0,
+            'max_idle_time' => (float) env('DB_WEB_MAX_IDLE_TIME', 60),
         ],
     ],
 ];

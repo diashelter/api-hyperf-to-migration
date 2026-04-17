@@ -159,15 +159,20 @@ class ParallelInsertService
             return $records;
         }
 
-        $allKeys = array_unique(array_merge(...array_map('array_keys', $records)));
-
-        return array_map(static function (array $record) use ($allKeys): array {
-            foreach ($allKeys as $key) {
-                if (! array_key_exists($key, $record)) {
-                    $record[$key] = null;
-                }
+        $keySet = [];
+        foreach ($records as $record) {
+            foreach ($record as $key => $_) {
+                $keySet[$key] = true;
             }
-            return $record;
-        }, $records);
+        }
+
+        $template = array_fill_keys(array_keys($keySet), null);
+
+        foreach ($records as &$record) {
+            $record += $template;
+        }
+        unset($record);
+
+        return $records;
     }
 }

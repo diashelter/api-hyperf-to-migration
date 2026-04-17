@@ -101,6 +101,14 @@ class ImportSessionMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_import_id' => 'imports',
+            'legacy_layout_id' => 'layouts',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_import_id'])) {

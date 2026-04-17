@@ -115,6 +115,14 @@ class CompanyLayoutMigrationController extends AbstractMigrationController
         ];
     }
 
+    protected function getForeignKeyMap(): array
+    {
+        return [
+            'legacy_company_id' => 'companies',
+            'legacy_layout_imp' => 'layouts',
+        ];
+    }
+
     protected function resolveForeignKeys(array $record, string $contractId): array
     {
         if (! empty($record['legacy_company_id'])) {
