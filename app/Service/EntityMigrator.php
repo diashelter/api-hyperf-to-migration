@@ -182,6 +182,10 @@ class EntityMigrator
             return $this->handleContractUsersPivot($jobId, $source, $legacyConnection, $contractId);
         }
 
+        if ($handler === 'user_permissions_delete') {
+            return $this->handleUserPermissionsDelete($jobId, $source, $legacyConnection, $contractId);
+        }
+
         $entity = $source->entity();
         $totals = [
             'status' => 'pending_special_handler',
@@ -314,6 +318,96 @@ class EntityMigrator
         $deltaFailed = $totals['failed'] - (int) ($progress['failed'] ?? 0);
         $deltaSkipped = $totals['skipped'] - (int) ($progress['skipped'] ?? 0);
         $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
+
+        return $totals;
+    }
+
+    /**
+     * Apaga de `permission_users` todos os registros cujos user_ids vêm da
+     * tabela `usuario_permissao` do legado, filtrados pelo contract_id resolvido.
+     * Idempotente: DELETE WHERE não falha se os registros já foram removidos.
+     */
+    private function handleUserPermissionsDelete(
+        string $jobId,
+        AbstractLegacySource $source,
+        string $legacyConnection,
+        string $contractId
+    ): array {
+        $entity = $source->entity();
+
+        $progress = $this->jobService->getEntityProgress($jobId, $entity);
+
+        $totals = [
+            'inserted' => 0,
+            'failed' => 0,
+            'skipped' => (int) ($progress['skipped'] ?? 0),
+            'last_id' => null,
+            'status' => 'processing',
+            'started_at' => $progress['started_at'] ?? (string) now(),
+        ];
+
+        $this->jobService->updateEntityProgress($jobId, $entity, [
+            'status' => 'processing',
+            'started_at' => $totals['started_at'],
+        ]);
+
+        try {
+            $legacyDbName = (string) Db::connection($legacyConnection)->selectOne('SELECT current_database() AS db')->db;
+            $resolvedContractId = $this->idMappingService->resolve('contracts', $legacyDbName, $contractId);
+
+            if ($resolvedContractId === null) {
+                throw new \RuntimeException("Contract '{$legacyDbName}' not found in id_mappings; run contracts migration first.");
+            }
+
+            $chunkSize = $source->chunkSize();
+            $lastId = null;
+
+            while (true) {
+                $rows = $source->paginate($legacyConnection, $lastId, $chunkSize);
+
+                if (empty($rows)) {
+                    break;
+                }
+
+                $legacyUserIds = array_column($rows, 'legacy_user_id');
+                $legacyUserIds = array_map('strval', array_filter($legacyUserIds));
+
+                $userIds = $this->idMappingService->resolveMany('users', $legacyUserIds, $contractId);
+                $resolvedUserIds = array_values($userIds);
+
+                if (! empty($resolvedUserIds)) {
+                    $deleted = Db::connection('conciliador_web')
+                        ->table('permission_users')
+                        ->where('contract_id', $resolvedContractId)
+                        ->whereIn('user_id', $resolvedUserIds)
+                        ->delete();
+
+                    $totals['skipped'] += $deleted;
+                }
+
+                $lastRow = end($rows);
+                $lastId = isset($lastRow[$source->paginationKey()])
+                    ? (string) $lastRow[$source->paginationKey()]
+                    : null;
+
+                if (count($rows) < $chunkSize) {
+                    break;
+                }
+            }
+
+            $totals['status'] = 'completed';
+        } catch (Throwable $e) {
+            if (str_contains($e->getMessage(), '42P01') || str_contains($e->getMessage(), 'does not exist')) {
+                $totals['status'] = 'completed';
+            } else {
+                $totals['status'] = 'failed';
+                $totals['error_message'] = $e->getMessage();
+            }
+        }
+
+        $totals['finished_at'] = (string) now();
+        $this->jobService->updateEntityProgress($jobId, $entity, $totals);
+        $this->jobService->incrementTotals($jobId, 0, $totals['failed'], 0);
 
         return $totals;
     }

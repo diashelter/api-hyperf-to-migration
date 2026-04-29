@@ -56,6 +56,7 @@ class EntityMetadataRegistry
         return [
             ContractSource::class,
             UserSource::class,
+            // UserPermissionSource::class,
             ContractUserSource::class,           // pivot (special handler)
             // PlanSource::class,
             // RulesSharingSource::class,
