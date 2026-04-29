@@ -65,7 +65,7 @@ class EntityMetadataRegistry
             PlanItemSource::class,
             CompanySource::class,
 
-            // CompanyLayoutSource::class,
+            CompanyLayoutSource::class,
             // CompanyLayoutFixedAccountSource::class,
 
             // PeopleSource::class,
