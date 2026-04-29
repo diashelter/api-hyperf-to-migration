@@ -58,7 +58,7 @@ class PlanItemSource extends AbstractLegacySource
                 tipo                AS "type",
                 origem              AS origin
             FROM pcontasconc_item
-            WHERE pk > CAST(NULLIF(:last_id, '') AS INTEGER)
+            WHERE pk > COALESCE(CAST(NULLIF(:last_id, '') AS INTEGER), 0)
             ORDER BY pk
             LIMIT :limit
         SQL;
