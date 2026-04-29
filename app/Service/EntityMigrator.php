@@ -129,6 +129,10 @@ class EntityMigrator
                     $totals['inserted'] += (int) $result['inserted'];
                     $totals['failed'] += (int) $result['failed'];
 
+                    if (! empty($result['errors']) && ! isset($totals['error_message'])) {
+                        $totals['error_message'] = $result['errors'][0]['message'] ?? 'unknown insert error';
+                    }
+
                     if (! empty($idMappings) && $result['inserted'] > 0) {
                         $this->idMappingService->storeBatch($entity, $idMappings, $contractId, $jobId);
                     }

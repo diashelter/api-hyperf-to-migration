@@ -61,7 +61,7 @@ class LayoutSource extends AbstractLegacySource
                 banco                                                           AS bank_column,
                 participante                                                    AS third_party_participant_column,
                 infadicional                                                    AS additional_information_column,
-                infadicional2                                                   AS complement_column,
+                LEFT(infadicional2::text, 10)                                    AS complement_column,
                 contadeb                                                        AS debit_account_column,
                 contacred                                                       AS credit_account_column,
                 filial                                                          AS filial_column,
@@ -113,7 +113,7 @@ class LayoutSource extends AbstractLegacySource
                 CASE historicoremoverquebra WHEN 1 THEN TRUE ELSE FALSE END     AS remove_line_break_in_history_when_export,
                 CASE mantervalor            WHEN 1 THEN TRUE ELSE FALSE END     AS keep_original_values_when_import,
                 parcela_padrao                                                  AS parcel_separator_when_import,
-                diaadd                                                          AS day_to_add_when_import,
+                CASE WHEN diaadd BETWEEN 0 AND 999 THEN diaadd::text ELSE NULL END AS day_to_add_when_import,
 
                 CASE alterar_numerodocumento WHEN 1 THEN TRUE ELSE FALSE END    AS show_document_number,
                 CASE mostrarparcela         WHEN 1 THEN TRUE ELSE FALSE END     AS show_parcel,

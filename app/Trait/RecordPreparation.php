@@ -118,6 +118,7 @@ trait RecordPreparation
     ): array {
         foreach ($fkMap as $field => $entity) {
             if (empty($record[$field])) {
+                unset($record[$field]);
                 continue;
             }
 

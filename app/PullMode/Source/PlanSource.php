@@ -31,7 +31,9 @@ class PlanSource extends AbstractLegacySource
 
     public function fkMap(): array
     {
-        return [];
+        return [
+            'legacy_contract_id' => 'contracts',
+        ];
     }
 
     public function sql(): string
@@ -44,7 +46,8 @@ class PlanSource extends AbstractLegacySource
                 CASE campo_retorno
                     WHEN 'Conta Completa' THEN 'COMPLETE'
                     ELSE 'REDUCED'
-                END                                                         AS account_default
+                END                                                         AS account_default,
+                CURRENT_DATABASE()                                          AS legacy_contract_id
             FROM pcontasconc
         SQL;
     }
