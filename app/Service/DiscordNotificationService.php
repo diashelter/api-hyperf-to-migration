@@ -20,8 +20,8 @@ use Throwable;
 
 use function array_slice;
 use function count;
-use function in_array;
 use function Hyperf\Support\env;
+use function in_array;
 
 class DiscordNotificationService
 {
@@ -204,7 +204,7 @@ class DiscordNotificationService
     {
         return match ($httpStatus) {
             500 => ['🔥', 10038562, "{$entity} · Erro interno"],
-            401 => ['🔒', 10181046, "{$entity} · Token inválido ou ausente"],
+            401 => ['🔒', 10181046, "{$entity} · API key inválida ou ausente"],
             403 => ['🚫', 10181046, "{$entity} · Contrato não autorizado"],
             429 => ['🚦', 15968788, "{$entity} · Rate limit excedido"],
             default => ['❌', 15158332, "{$entity} · HTTP {$httpStatus}"],

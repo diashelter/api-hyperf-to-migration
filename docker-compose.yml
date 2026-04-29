@@ -22,6 +22,30 @@ services:
       - conciliador-net
       - app-network
 
+  migrator-worker:
+    container_name: conciliador-migrator-worker
+    image: conciliador-migrator
+    build:
+      dockerfile: dev.Dockerfile
+      args:
+        UID: 1000
+        GID: 1000
+    volumes:
+      - ./:/opt/www
+    environment:
+      - APP_ENV=dev
+      - SCAN_CACHEABLE=false
+    depends_on:
+      - migrator
+      - migrator-postgres
+      - redis
+    networks:
+      - conciliador-net
+      - app-network
+    # Mesma imagem da API; o consumer da fila é forkado via `processes` em
+    # config/autoload/async_queue.php. Permite escalar horizontalmente
+    # com `docker compose up -d --scale migrator-worker=N`.
+
   migrator-postgres:
     container_name: conciliador-migrator-postgres
     image: postgres:16-alpine

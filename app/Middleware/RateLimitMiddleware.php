@@ -31,7 +31,10 @@ class RateLimitMiddleware implements MiddlewareInterface
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        $contractId = $request->getHeaderLine('X-Contract-Id') ?: 'anonymous';
+        $contractId = (string) $request->getAttribute(
+            'contract_id',
+            $request->getHeaderLine('X-Contract-Id') ?: 'anonymous'
+        );
         $path = $request->getUri()->getPath();
 
         // 'rules-sharings' contém a substring 'rules', por isso comparamos com '/rules'

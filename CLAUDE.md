@@ -67,9 +67,32 @@ bash test/e2e/smoke-test.sh
 # Testar e limpar dados de teste ao final
 bash test/e2e/smoke-test.sh --clean
 
-# Passar JWT_SECRET customizado
-JWT_SECRET=meu-secret bash test/e2e/smoke-test.sh
+# Passar API key criptografada para o smoke pull-mode
+MIGRATION_ENCRYPTED_API_KEY=v1... bash test/e2e/smoke-pull-mode.sh
+
+# Pull-mode (lê banco legado, transforma e migra para conciliador_web)
+LEGACY_DB=teste bash test/e2e/smoke-pull-mode.sh
 ```
+
+**Pull-Mode Migration (modo PULL — em adição ao push existente):**
+
+```bash
+# 1. Configurar whitelist em .env (LEGACY_DBS=cliente_x,cliente_y + LEGACY_DB_<UPPER>_*)
+# 2. Aplicar migration nova (cria migration_jobs)
+docker exec conciliador-migrator php bin/hyperf.php migrate
+
+# 3. Disparar (autenticado)
+curl -X POST http://localhost:9501/api/v1/migration/database \
+    -H "X-Api-Key: $API_KEY" \
+    -H "X-Contract-Id: $CONTRACT_ID" \
+    -d '{"legacy_db":"cliente_x"}'   # → 202 + job_id + status_url
+
+# 4. Polling
+curl http://localhost:9501/api/v1/migration/job/<job_id> \
+    -H "X-Api-Key: $API_KEY" -H "X-Contract-Id: $CONTRACT_ID"
+```
+
+Veja `PLAN.md`, `TASKS.md`, `DONE.md` no root para detalhes da arquitetura pull-mode.
 
 ---
 
@@ -84,7 +107,7 @@ JWT_SECRET=meu-secret bash test/e2e/smoke-test.sh
 | `app/Service/IdMappingService.php` | Reads/writes `migration_id_mappings`; `resolve`, `resolveMany`, `storeBatch` |
 | `app/Service/MigrationBatchService.php` | Lifecycle of `migration_batches` (create → markProcessing → markCompleted/markFailed) |
 | `app/Service/MigrationAuditService.php` | Request-level audit (`open`/`close`) and optional record-level logging (`logRecords`) |
-| `app/Middleware/ApiTokenMiddleware.php` | JWT validation; sets `contract_id` and `user_id` request attributes |
+| `app/Middleware/ApiTokenMiddleware.php` | Encrypted API key validation; sets `contract_id` and `user_id` request attributes |
 | `app/Middleware/RateLimitMiddleware.php` | Redis-backed per-contract rate limiting |
 | `config/autoload/databases.php` | Declares both DB connections |
 | `migrations/` | 5 migrations for migrator's own schema (never touches `conciliador_web` schema) |
@@ -106,7 +129,7 @@ Extend `AbstractMigrationController`, implement the four required methods, and d
 ```env
 DB_HOST / DB_DATABASE / DB_USERNAME / DB_PASSWORD        # migrator's own DB
 DB_WEB_HOST / DB_WEB_DATABASE / DB_WEB_USERNAME / DB_WEB_PASSWORD  # target DB
-JWT_SECRET                                               # HS256 signing key
+MIGRATION_API_KEY / MIGRATION_API_KEY_ENCRYPTION_KEY    # API key auth
 ```
 
 **Tuning:**

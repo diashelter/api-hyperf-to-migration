@@ -59,4 +59,24 @@ return [
             'max_idle_time' => (float) env('DB_WEB_MAX_IDLE_TIME', 60),
         ],
     ],
+
+    'legacy_database' => [
+        'driver' => env('DB_LEGACY_DRIVER', 'pgsql'),
+        'host' => env('DB_LEGACY_HOST', 'postgres'),
+        'database' => env('DB_LEGACY_DATABASE', null), // Será sobrescrito dinamicamente
+        'port' => (int) env('DB_LEGACY_PORT', 5432),
+        'username' => env('DB_LEGACY_USERNAME', 'postgres'),
+        'password' => env('DB_LEGACY_PASSWORD', 'conciliador'),
+        'charset' => 'utf8',
+        'prefix' => '',
+        'schema' => 'public',
+        'pool' => [
+            'min_connections' => (int) env('DB_LEGACY_POOL_MIN', 5),
+            'max_connections' => (int) env('DB_LEGACY_POOL_MAX', 30),
+            'connect_timeout' => 10.0,
+            'wait_timeout' => 3.0,
+            'heartbeat' => -1,
+            'max_idle_time' => (float) env('DB_LEGACY_MAX_IDLE_TIME', 60),
+        ],
+    ],
 ];

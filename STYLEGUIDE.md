@@ -19,7 +19,7 @@
 | Database fields / columns | snake_case | `legacy_id`, `contract_id`, `created_at` |
 | Database table names | plural snake_case | `companies`, `import_records`, `migration_id_mappings` |
 | Route paths | kebab-case | `/api/v1/migration/import-records`, `/api/v1/migration/rules-sharings` |
-| Environment variables | UPPER_SNAKE_CASE | `JWT_SECRET`, `MIGRATION_CHUNK_SIZE`, `DB_WEB_HOST` |
+| Environment variables | UPPER_SNAKE_CASE | `MIGRATION_API_KEY`, `MIGRATION_CHUNK_SIZE`, `DB_WEB_HOST` |
 | PHP 8.1 enum values | lowercase string | `'completed'`, `'processing'`, `'received'` |
 | Namespaces | PascalCase with backslash | `App\Controller\Migration`, `App\Service` |
 

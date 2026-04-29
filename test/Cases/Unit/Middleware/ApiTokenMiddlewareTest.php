@@ -13,7 +13,6 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Unit\Middleware;
 
 use App\Middleware\ApiTokenMiddleware;
-use Firebase\JWT\JWT;
 use Hyperf\HttpMessage\Server\Request;
 use Hyperf\HttpMessage\Uri\Uri;
 use Hyperf\HttpServer\Contract\ResponseInterface as HttpResponse;
@@ -32,16 +31,16 @@ final class ApiTokenMiddlewareTest extends UnitTestCase
     {
         parent::setUp();
 
-        $this->setEnvValue('JWT_SECRET', 'middleware-secret-key-with-32-bytes');
+        $this->setEnvValue('MIGRATION_API_KEY', 'middleware-api-key');
     }
 
-    public function testProcessRejectsRequestsWithoutBearerToken(): void
+    public function testProcessRejectsRequestsWithoutApiKey(): void
     {
         [$responseFactory, $response] = $this->mockJsonResponse(
             401,
             static fn (array $payload): bool => $payload === [
                 'error' => 'Unauthorized',
-                'message' => 'Missing or invalid Authorization header',
+                'message' => 'Missing or invalid X-Api-Key header',
             ]
         );
 
@@ -58,14 +57,14 @@ final class ApiTokenMiddlewareTest extends UnitTestCase
         $this->assertSame($response, $result);
     }
 
-    public function testProcessRejectsRequestsWithInvalidToken(): void
+    public function testProcessRejectsRequestsWithInvalidApiKey(): void
     {
         [$responseFactory, $response] = $this->mockJsonResponse(
             401,
-            static function (array $payload): bool {
-                return $payload['error'] === 'Unauthorized'
-                    && str_starts_with($payload['message'], 'Invalid token: ');
-            }
+            static fn (array $payload): bool => $payload === [
+                'error' => 'Unauthorized',
+                'message' => 'Invalid API key',
+            ]
         );
 
         $handler = $this->createMock(RequestHandlerInterface::class);
@@ -75,7 +74,7 @@ final class ApiTokenMiddlewareTest extends UnitTestCase
         $request = new Request(
             'GET',
             new Uri('http://localhost/api/v1/migration/companies'),
-            ['Authorization' => 'Bearer invalid-token']
+            ['X-Api-Key' => 'invalid-api-key']
         );
 
         $result = $middleware->process($request, $handler);
@@ -83,27 +82,26 @@ final class ApiTokenMiddlewareTest extends UnitTestCase
         $this->assertSame($response, $result);
     }
 
-    public function testProcessRejectsRequestsWhenContractDoesNotMatchToken(): void
+    public function testProcessRejectsRequestsWhenConfiguredApiKeyIsMissing(): void
     {
         [$responseFactory, $response] = $this->mockJsonResponse(
-            403,
+            401,
             static fn (array $payload): bool => $payload === [
-                'error' => 'Forbidden',
-                'message' => 'Token contract_id does not match X-Contract-Id header',
+                'error' => 'Unauthorized',
+                'message' => 'Invalid API key',
             ]
         );
 
         $handler = $this->createMock(RequestHandlerInterface::class);
         $handler->expects($this->never())->method('handle');
 
+        $this->setEnvValue('MIGRATION_API_KEY', null);
+
         $middleware = new ApiTokenMiddleware($responseFactory);
         $request = new Request(
             'GET',
             new Uri('http://localhost/api/v1/migration/companies'),
-            [
-                'Authorization' => 'Bearer ' . $this->createToken('contract-1'),
-                'X-Contract-Id' => 'contract-2',
-            ]
+            ['X-Api-Key' => 'middleware-api-key']
         );
 
         $result = $middleware->process($request, $handler);
@@ -111,7 +109,7 @@ final class ApiTokenMiddlewareTest extends UnitTestCase
         $this->assertSame($response, $result);
     }
 
-    public function testProcessPassesRequestForwardWithResolvedAttributes(): void
+    public function testProcessPassesRequestForwardWithValidApiKey(): void
     {
         $responseFactory = $this->createStub(HttpResponse::class);
         $expectedResponse = $this->createStub(ResponseInterface::class);
@@ -119,37 +117,19 @@ final class ApiTokenMiddlewareTest extends UnitTestCase
         $handler = $this->createMock(RequestHandlerInterface::class);
         $handler->expects($this->once())
             ->method('handle')
-            ->with($this->callback(function (Request $request): bool {
-                $this->assertSame('user-1', $request->getAttribute('user_id'));
-                $this->assertSame('contract-1', $request->getAttribute('contract_id'));
-
-                return true;
-            }))
+            ->with($this->isInstanceOf(Request::class))
             ->willReturn($expectedResponse);
 
         $middleware = new ApiTokenMiddleware($responseFactory);
         $request = new Request(
             'GET',
             new Uri('http://localhost/api/v1/migration/companies'),
-            [
-                'Authorization' => 'Bearer ' . $this->createToken('contract-1'),
-                'X-Contract-Id' => 'contract-1',
-            ]
+            ['X-Api-Key' => 'middleware-api-key']
         );
 
         $result = $middleware->process($request, $handler);
 
         $this->assertSame($expectedResponse, $result);
-    }
-
-    private function createToken(?string $contractId): string
-    {
-        return JWT::encode([
-            'sub' => 'user-1',
-            'contract_id' => $contractId,
-            'iat' => time(),
-            'exp' => time() + 3600,
-        ], 'middleware-secret-key-with-32-bytes', 'HS256');
     }
 
     /**

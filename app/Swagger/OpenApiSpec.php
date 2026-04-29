@@ -40,8 +40,8 @@ Erros retornam **RFC 7807 Problem Details** (`Content-Type: application/problem+
 ### Erro (corpo RFC 7807)
 | Código | Semântica |
 |--------|-----------|
-| `401 Unauthorized` | Token ausente ou inválido |
-| `403 Forbidden` | Token válido mas sem permissão ao contrato |
+| `401 Unauthorized` | API key ausente ou inválida |
+| `403 Forbidden` | Acesso negado |
 | `404 Not Found` | Recurso (ex: batch) não encontrado |
 | `413 Content Too Large` | Batch excede o limite máximo |
 | `422 Unprocessable Entity` | Batch vazio ou todos os registros falharam na validação |
@@ -80,21 +80,22 @@ Envie campos `legacy_*_id` no batch e a API resolve automaticamente para UUIDs v
 - Endpoints assíncronos (bulk): **30 req/min** por contract
 
 ## Autenticação
-Obtenha um token JWT via `POST /api/v1/token` e envie no header `Authorization: Bearer {token}`.
+Envie a API key no header `X-Api-Key`.
+O valor recebido é comparado diretamente com `MIGRATION_API_KEY` configurada no `.env`.
 DESC,
     contact: new OA\Contact(name: 'DevCC Team', email: 'dev@conciliador.com')
 )]
 #[OA\Server(url: 'http://localhost:9501', description: 'Local Development (Docker)')]
 #[OA\Server(url: 'http://migrator.conciliador.local:9501', description: 'Staging')]
 #[OA\SecurityScheme(
-    securityScheme: 'bearerAuth',
-    type: 'http',
-    scheme: 'bearer',
-    bearerFormat: 'JWT',
-    description: 'JWT token obtido via POST /api/v1/token. Envie também o header X-Contract-Id com o UUID do contrato.'
+    securityScheme: 'apiKeyAuth',
+    type: 'apiKey',
+    name: 'X-Api-Key',
+    in: 'header',
+    description: 'API key simples enviada no header X-Api-Key. O valor é comparado com MIGRATION_API_KEY no .env.'
 )]
 #[OA\Tag(name: 'Health', description: 'Health check do serviço')]
-#[OA\Tag(name: 'Auth', description: 'Autenticação e geração de token JWT')]
+#[OA\Tag(name: 'Auth', description: 'Autenticação por API key')]
 #[OA\Tag(name: 'Migration - Sync', description: 'Endpoints de migração síncrona (dados de referência, baixo volume). Inserção direta via DB::transaction().')]
 #[OA\Tag(name: 'Migration - Async', description: 'Endpoints de migração assíncrona (alto volume, 1M+). Processamento paralelo via coroutines Swoole com tracking de batch.')]
 #[OA\Tag(name: 'Status & Control', description: 'Consulta de status de batches assíncronos e mapeamento de IDs legados → UUIDs')]
