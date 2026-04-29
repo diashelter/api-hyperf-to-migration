@@ -30,6 +30,9 @@ class MigrationOrchestrator
     #[Inject]
     protected LegacyConnectionFactory $legacyConnectionFactory;
 
+    #[Inject]
+    protected ExportLayoutSyncService $exportLayoutSyncService;
+
     private LoggerInterface $logger;
 
     private ContainerInterface $container;
@@ -67,6 +70,12 @@ class MigrationOrchestrator
         }
 
         $this->jobService->markProcessing($jobId);
+
+        try {
+            $this->exportLayoutSyncService->sync($legacyConnection, $contractId);
+        } catch (Throwable $e) {
+            $this->logger->warning("[job {$jobId}] export layout sync failed (non-fatal): " . $e->getMessage());
+        }
 
         $errorSummary = [];
 
