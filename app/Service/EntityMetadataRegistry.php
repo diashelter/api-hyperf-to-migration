@@ -56,43 +56,43 @@ class EntityMetadataRegistry
         return [
             // === Phase 1: raízes sem dependências ===
             ContractSource::class,
-            UserSource::class,
-            PlanSource::class,
-            RulesSharingSource::class,
-            LayoutSource::class,
+            // UserSource::class,
+            // PlanSource::class,
+            // RulesSharingSource::class,
+            // LayoutSource::class,
 
-            // === Phase 2: dependentes simples ===
-            PlanItemSource::class,
-            ContractUserSource::class,           // pivot (special handler)
+            // // === Phase 2: dependentes simples ===
+            // PlanItemSource::class,
+            // ContractUserSource::class,           // pivot (special handler)
 
-            // === Phase 3: companies ===
-            CompanySource::class,
+            // // === Phase 3: companies ===
+            // CompanySource::class,
 
-            // === Phase 4: company_layout + dependentes ===
-            CompanyLayoutSource::class,
-            CompanyLayoutFixedAccountSource::class,
+            // // === Phase 4: company_layout + dependentes ===
+            // CompanyLayoutSource::class,
+            // CompanyLayoutFixedAccountSource::class,
 
-            // === Phase 5: peoples ===
-            PeopleSource::class,
-            PeopleVinculatedSource::class,
+            // // === Phase 5: peoples ===
+            // PeopleSource::class,
+            // PeopleVinculatedSource::class,
 
-            // === Phase 6: imports + records ===
-            ImportSource::class,
-            ImportSessionSource::class,
-            ImportRecordSource::class,           // uuid7
+            // // === Phase 6: imports + records ===
+            // ImportSource::class,
+            // ImportSessionSource::class,
+            // ImportRecordSource::class,           // uuid7
 
-            // === Phase 7: rules ===
-            RuleSource::class,
+            // // === Phase 7: rules ===
+            // RuleSource::class,
 
-            // === Phase 8: confrontations ===
-            ConfrontationSource::class,
-            ConfrontationRecordSource::class,    // uuid7
+            // // === Phase 8: confrontations ===
+            // ConfrontationSource::class,
+            // ConfrontationRecordSource::class,    // uuid7
 
-            // === Phase 9: user_company_restrictions ===
-            UserCompanyRestrictionSource::class,
+            // // === Phase 9: user_company_restrictions ===
+            // UserCompanyRestrictionSource::class,
 
-            // === Phase 10: user_permissions (delete only, special handler) ===
-            UserPermissionSource::class,
+            // // === Phase 10: user_permissions (delete only, special handler) ===
+            // UserPermissionSource::class,
         ];
     }
 }

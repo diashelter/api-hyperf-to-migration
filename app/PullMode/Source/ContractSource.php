@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace App\PullMode\Source;
 
 use Hyperf\DbConnection\Db;
+use function Hyperf\Support\env;
 
 /**
  * Source legada da tabela `contrato` → `contracts`.
@@ -99,16 +100,16 @@ class ContractSource extends AbstractLegacySource
 
     public function transformRow(array $row, string $_contractId): array
     {
-        // Mapeia label legado de status para o valor esperado no destino.
-        // Quando um LookupCacheService for portado para o pull-mode, substituir
-        // por uma chamada de lookup.
-        $statusMap = [
-            'ATIVO' => 'ATIVO',
-            'SUSPENSO' => 'SUSPENSO',
-        ];
         $legacyStatus = $row['legacy_status_contract'] ?? null;
-        $row['status_contract'] = isset($legacyStatus) ? ($statusMap[$legacyStatus] ?? null) : null;
         unset($row['legacy_status_contract']);
+
+        $row['status_contract'] = $legacyStatus !== null
+            ? Db::table('lookup_cache')
+                ->where('entity', 'status')
+                ->where('label', $legacyStatus)
+                ->where('environment', env('APP_ENV', 'local'))
+                ->value('external_id')
+            : null;
 
         // PG retorna booleans como true/false — normalizar para PHP.
         $row['is_approval'] = (bool) ($row['is_approval'] ?? false);

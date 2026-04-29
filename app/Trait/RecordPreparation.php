@@ -150,7 +150,10 @@ trait RecordPreparation
         }
 
         if (empty($record['contract_id'])) {
-            $record['contract_id'] = $idMappingService->resolve('contracts', $contractId, $contractId);
+            $resolved = $idMappingService->resolve('contracts', $contractId, $contractId);
+            if ($resolved !== null) {
+                $record['contract_id'] = $resolved;
+            }
         }
 
         return $record;
