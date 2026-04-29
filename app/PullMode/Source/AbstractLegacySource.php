@@ -127,6 +127,15 @@ abstract class AbstractLegacySource
     }
 
     /**
+     * Se false, o pipeline NÃO tenta resolver/injetar contract_id no registro.
+     * Usar em tabelas que não têm coluna contract_id (ex.: plan_items).
+     */
+    public function hasContractId(): bool
+    {
+        return true;
+    }
+
+    /**
      * Transformação por linha após o SELECT. O array já vem com chaves no formato
      * de destino (graças aos aliases do SQL); sobrescrever apenas para casos
      * não-triviais — concatenar campos, parsing de datas, defaults, etc.

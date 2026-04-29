@@ -77,8 +77,11 @@ class EntityMigrator
             'last_id' => $lastId,
         ]);
 
-        $resolveFn = function (array $record, string $cid) use ($fkMap): array {
-            $record = $this->recordPrepResolveContractIdFK($this->idMappingService, $record, $cid);
+        $hasContractId = $source->hasContractId();
+        $resolveFn = function (array $record, string $cid) use ($fkMap, $hasContractId): array {
+            if ($hasContractId) {
+                $record = $this->recordPrepResolveContractIdFK($this->idMappingService, $record, $cid);
+            }
             return $this->recordPrepResolveForeignKeysFromMap($this->idMappingService, $fkMap, $record, $cid);
         };
 

@@ -41,6 +41,11 @@ class PlanItemSource extends AbstractLegacySource
         ];
     }
 
+    public function hasContractId(): bool
+    {
+        return false;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'
@@ -53,6 +58,9 @@ class PlanItemSource extends AbstractLegacySource
                 tipo                AS "type",
                 origem              AS origin
             FROM pcontasconc_item
+            WHERE pk > CAST(NULLIF(:last_id, '') AS INTEGER)
+            ORDER BY pk
+            LIMIT :limit
         SQL;
     }
 

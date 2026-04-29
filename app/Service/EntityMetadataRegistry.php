@@ -58,12 +58,12 @@ class EntityMetadataRegistry
             UserSource::class,
             // UserPermissionSource::class,
             ContractUserSource::class,           // pivot (special handler)
-            // PlanSource::class,
-            // RulesSharingSource::class,
-            // LayoutSource::class,
+            PlanSource::class,
+            RulesSharingSource::class,
+            LayoutSource::class,
 
-            // PlanItemSource::class,
-            // CompanySource::class,
+            PlanItemSource::class,
+            CompanySource::class,
 
             // CompanyLayoutSource::class,
             // CompanyLayoutFixedAccountSource::class,
