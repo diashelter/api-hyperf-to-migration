@@ -56,7 +56,7 @@ class EntityMetadataRegistry
         return [
             // === Phase 1: raízes sem dependências ===
             ContractSource::class,
-            // UserSource::class,
+            UserSource::class,
             // PlanSource::class,
             // RulesSharingSource::class,
             // LayoutSource::class,
