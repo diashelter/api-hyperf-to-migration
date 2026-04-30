@@ -61,6 +61,7 @@ class ImportSource extends AbstractLegacySource
             JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
             WHERE fk_layout <> 0
             GROUP BY importacao.fk_empresa, fk_layoutempresa, layout_empresa.saldo_anterior
+            HAVING MAX(importacao.inclusao) > NOW() - INTERVAL '60 days'
             ORDER BY fk_layoutempresa
         SQL;
     }

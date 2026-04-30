@@ -16,10 +16,12 @@ use App\PullMode\Source\AbstractLegacySource;
 use App\PullMode\Source\CompanyLayoutFixedAccountSource;
 use App\PullMode\Source\CompanyLayoutSource;
 use App\PullMode\Source\CompanySource;
+use App\PullMode\Source\ConfrontationConciliationSource;
 use App\PullMode\Source\ConfrontationRecordSource;
 use App\PullMode\Source\ConfrontationSource;
 use App\PullMode\Source\ContractSource;
 use App\PullMode\Source\ContractUserSource;
+use App\PullMode\Source\IgnoredConciliationTermSource;
 use App\PullMode\Source\ImportRecordSource;
 use App\PullMode\Source\ImportSessionSource;
 use App\PullMode\Source\ImportSource;
@@ -56,8 +58,8 @@ class EntityMetadataRegistry
         return [
             ContractSource::class,
             UserSource::class,
-            // UserPermissionSource::class,
-            ContractUserSource::class,           // pivot (special handler)
+            UserPermissionSource::class,
+            ContractUserSource::class,
             PlanSource::class,
             RulesSharingSource::class,
             LayoutSource::class,
@@ -67,22 +69,22 @@ class EntityMetadataRegistry
 
             CompanyLayoutSource::class,
             // CompanyLayoutFixedAccountSource::class,
+            UserCompanyRestrictionSource::class,
 
-            // PeopleSource::class,
-            // PeopleVinculatedSource::class,
+            PeopleSource::class,
+            PeopleVinculatedSource::class,
 
-            // ImportSource::class,
-            // ImportSessionSource::class,
-            // ImportRecordSource::class,           // uuid7
+            ImportSource::class,
+            ImportSessionSource::class,
+            ImportRecordSource::class,
 
-            // RuleSource::class,
+            RuleSource::class,
+
+            // IgnoredConciliationTermSource::class,
 
             // ConfrontationSource::class,
-            // ConfrontationRecordSource::class,    // uuid7
-
-            // UserCompanyRestrictionSource::class,
-
-            // UserPermissionSource::class,
+            // ConfrontationRecordSource::class,
+            // ConfrontationConciliationSource::class,
         ];
     }
 }

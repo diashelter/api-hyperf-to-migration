@@ -29,6 +29,11 @@ class ImportSessionSource extends AbstractLegacySource
         return 'import_sessions';
     }
 
+    public function hasContractId(): bool
+    {
+        return false;
+    }
+
     public function fkMap(): array
     {
         return [
@@ -40,14 +45,22 @@ class ImportSessionSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
-            SELECT DISTINCT
-                'IS-' || fk_layoutempresa   AS legacy_id,
-                fk_layout                   AS legacy_layout_id,
-                'IMP-' || fk_layoutempresa  AS legacy_import_id
+            SELECT
+                'IS-' || importacao.fk_layoutempresa  AS legacy_id,
+                importacao.fk_layout                  AS legacy_layout_id,
+                'IMP-' || importacao.fk_layoutempresa AS legacy_import_id,
+                COALESCE(
+                    MIN(NULLIF(importacao.arquivo, '')),
+                    'legacy-import-' || importacao.fk_layoutempresa || '.txt'
+                )                           AS file_name,
+                MIN(NULLIF(importacao.arquivo, '')) AS original_file_name,
+                'completed'                 AS status
             FROM importacao
-            JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
-            WHERE fk_layout <> 0
-            ORDER BY 'IS-' || fk_layoutempresa
+            JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
+            WHERE importacao.fk_layout <> 0
+            GROUP BY importacao.fk_layoutempresa, importacao.fk_layout
+            HAVING MAX(importacao.inclusao) > NOW() - INTERVAL '60 days'
+            ORDER BY 'IS-' || importacao.fk_layoutempresa
         SQL;
     }
 

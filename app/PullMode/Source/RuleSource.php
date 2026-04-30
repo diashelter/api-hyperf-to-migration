@@ -31,7 +31,7 @@ class RuleSource extends AbstractLegacySource
 
     public function chunkSize(): int
     {
-        return 2000;
+        return 20000;
     }
 
     public function fkMap(): array
@@ -45,6 +45,7 @@ class RuleSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
+            WITH base AS (
             SELECT
                 regras.id                                               AS legacy_id,
                 layout_empresa.fk_empresa                              AS legacy_company_id,
@@ -82,7 +83,15 @@ class RuleSource extends AbstractLegacySource
             FROM regras
             JOIN layout_empresa ON regras.fk_layout_empresa = layout_empresa.pk
             WHERE fk_layoutimp <> 0
-            ORDER BY regras.id
+            )
+            SELECT *
+            FROM base
+            WHERE legacy_id > COALESCE(
+                CAST(NULLIF(:last_id, '') AS UUID),
+                '00000000-0000-0000-0000-000000000000'::UUID
+            )
+            ORDER BY legacy_id ASC
+            LIMIT :limit
         SQL;
     }
 

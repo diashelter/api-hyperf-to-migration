@@ -34,6 +34,11 @@ class PeopleVinculatedSource extends AbstractLegacySource
         return 2000;
     }
 
+    public function hasContractId(): bool
+    {
+        return false;
+    }
+
     public function fkMap(): array
     {
         return [

@@ -46,12 +46,12 @@ class UserCompanyRestrictionSource extends AbstractLegacySource
     {
         return <<<'SQL'
             SELECT
-                id              AS legacy_id,
-                usuario_id      AS legacy_user_id,
-                empresa_id      AS legacy_company_id
-            FROM usuario_empresa_restricao
-            WHERE id::text > :last_id
-            ORDER BY id ASC
+                pk          AS legacy_id,
+                fk_usuario  AS legacy_user_id,
+                fk_empresa  AS legacy_company_id
+            FROM usuario_empresas
+            WHERE pk > COALESCE(CAST(NULLIF(:last_id, '') AS INTEGER), 0)
+            ORDER BY pk ASC
             LIMIT :limit
         SQL;
     }
