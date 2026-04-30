@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "conciliador-migrator-migration-jobs-only",
     "name": "Conciliador Migrator - Migration Jobs API",
-    "description": "Collection somente com endpoints do MigrationJobController.\n\nAutenticacao:\n- Header X-Api-Key: valor de MIGRATION_API_KEY\n- Header X-Contract-Id: identificador do contrato\n\nFluxo recomendado:\n1) POST /api/v1/migration/database para criar o job\n2) GET /api/v1/migration/job/{jobId} para acompanhar um job\n3) GET /api/v1/migration/jobs para listar jobs do contrato\n\nObservacoes:\n- Rate limit padrao: MIGRATION_RATE_LIMIT por minuto (default 60)\n- Erros comuns: 401 (api key), 422 (validacao/legado), 429 (rate limit)",
+    "description": "Collection somente com endpoints do MigrationJobController.\n\nAutenticacao:\n- Header X-Api-Key: valor de MIGRATION_API_KEY\n\nFluxo recomendado:\n1) POST /api/v1/migration/database para criar o job\n2) GET /api/v1/migration/job/{jobId} para acompanhar um job\n3) GET /api/v1/migration/jobs para listar jobs recentes ou GET /api/v1/migration/jobs?legacy_db={{legacy_db}} para filtrar\n\nObservacoes:\n- legacy_db e usado como namespace interno da migracao; o UUID real de contrato e criado/mapeado na entidade contracts\n- Rate limit padrao: MIGRATION_RATE_LIMIT por minuto (default 60)\n- Erros comuns: 401 (api key), 422 (validacao/legado), 429 (rate limit)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -13,11 +13,6 @@
     },
     {
       "key": "api_key",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "contract_id",
       "value": "",
       "type": "string"
     },
@@ -52,10 +47,6 @@
                 "value": "{{api_key}}"
               },
               {
-                "key": "X-Contract-Id",
-                "value": "{{contract_id}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -76,7 +67,7 @@
                 "database"
               ]
             },
-            "description": "Dispara um job de migracao para o banco legado informado em `legacy_db`.\n\nHeaders obrigatorios:\n- X-Api-Key\n- X-Contract-Id\n- Content-Type: application/json\n\nBody:\n- legacy_db (string, obrigatorio): nome logico do banco legado\n\nSucesso:\n- 202 Accepted\n- Body: { job_id, legacy_db, status, status_url }\n- Header Location: /api/v1/migration/job/{jobId}\n\nErros comuns:\n- 401 Unauthorized: api key ausente/invalida\n- 422 Unprocessable Entity: validacao ou falha de conexao no legado\n- 429 Too Many Requests: limite por minuto excedido"
+            "description": "Dispara um job de migracao para o banco legado informado em `legacy_db`.\n\nHeaders obrigatorios:\n- X-Api-Key\n- Content-Type: application/json\n\nBody:\n- legacy_db (string, obrigatorio): nome logico do banco legado. Tambem vira o namespace interno da migracao.\n\nSucesso:\n- 202 Accepted\n- Body: { job_id, legacy_db, status, status_url }\n- Header Location: /api/v1/migration/job/{jobId}\n\nErros comuns:\n- 401 Unauthorized: api key ausente/invalida\n- 422 Unprocessable Entity: validacao ou falha de conexao no legado\n- 429 Too Many Requests: limite por minuto excedido"
           },
           "event": [
             {
@@ -107,10 +98,6 @@
               {
                 "key": "X-Api-Key",
                 "value": "{{api_key}}"
-              },
-              {
-                "key": "X-Contract-Id",
-                "value": "{{contract_id}}"
               }
             ],
             "url": {
@@ -126,7 +113,7 @@
                 "{{job_id}}"
               ]
             },
-            "description": "Consulta o status detalhado de um job especifico.\n\nHeaders obrigatorios:\n- X-Api-Key\n- X-Contract-Id\n\nPath param:\n- job_id: UUID retornado no POST /database\n\nSucesso:\n- 200 OK com status do job e progresso por entidade (entity_progress)\n\nErros comuns:\n- 401 Unauthorized\n- 404 Not Found: job nao encontrado\n- 429 Too Many Requests"
+            "description": "Consulta o status detalhado de um job especifico.\n\nHeaders obrigatorios:\n- X-Api-Key\n\nPath param:\n- job_id: UUID retornado no POST /database\n\nSucesso:\n- 200 OK com status do job e progresso por entidade (entity_progress)\n\nErros comuns:\n- 401 Unauthorized\n- 404 Not Found: job nao encontrado\n- 429 Too Many Requests"
           },
           "response": []
         },
@@ -138,14 +125,10 @@
               {
                 "key": "X-Api-Key",
                 "value": "{{api_key}}"
-              },
-              {
-                "key": "X-Contract-Id",
-                "value": "{{contract_id}}"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/migration/jobs",
+              "raw": "{{base_url}}/api/v1/migration/jobs?legacy_db={{legacy_db}}",
               "host": [
                 "{{base_url}}"
               ],
@@ -154,9 +137,15 @@
                 "v1",
                 "migration",
                 "jobs"
+              ],
+              "query": [
+                {
+                  "key": "legacy_db",
+                  "value": "{{legacy_db}}"
+                }
               ]
             },
-            "description": "Lista os jobs de migracao do contrato informado em `X-Contract-Id`.\n\nHeaders obrigatorios:\n- X-Api-Key\n- X-Contract-Id\n\nSucesso:\n- 200 OK com array de jobs\n\nErros comuns:\n- 401 Unauthorized\n- 422 Unprocessable Entity: contract_id ausente\n- 429 Too Many Requests"
+            "description": "Lista os jobs de migracao. Use query `legacy_db` para filtrar por banco legado.\n\nHeaders obrigatorios:\n- X-Api-Key\n\nSucesso:\n- 200 OK com array de jobs\n\nErros comuns:\n- 401 Unauthorized\n- 429 Too Many Requests"
           },
           "response": []
         }

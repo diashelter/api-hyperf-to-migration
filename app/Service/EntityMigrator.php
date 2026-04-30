@@ -98,12 +98,34 @@ class EntityMigrator
                     $rows
                 );
 
+                $transformedBatch = $batch;
+
                 [$batch, $skipped] = $this->recordPrepFilterDuplicates(
                     $this->idMappingService,
                     $entity,
                     $batch,
                     $contractId
                 );
+
+                [$batch, $skipped] = $this->restoreRecordsWithMissingTargets(
+                    $targetConnection,
+                    $targetTable,
+                    $transformedBatch,
+                    $batch,
+                    $skipped
+                );
+
+                [$batch, $reusedMappings] = $this->reuseExistingUsersByEmail(
+                    $entity,
+                    $targetConnection,
+                    $targetTable,
+                    $batch
+                );
+
+                if (! empty($reusedMappings)) {
+                    $this->idMappingService->storeBatch($entity, $reusedMappings, $contractId, $jobId);
+                    $totals['skipped'] += count($reusedMappings);
+                }
 
                 $this->recordPrepPrefetchForeignKeys(
                     $this->idMappingService,
@@ -175,6 +197,147 @@ class EntityMigrator
         $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
 
         return $totals;
+    }
+
+    /**
+     * Mappings locais podem sobreviver a limpezas manuais no banco destino.
+     * Quando isso acontece, tratar o registro como duplicado deixa FKs órfãs.
+     * Se o new_id mapeado não existe mais no target, reprocessamos o registro e
+     * deixamos storeBatch() atualizar o mapping para o novo UUID inserido.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>}
+     */
+    private function restoreRecordsWithMissingTargets(
+        string $targetConnection,
+        string $targetTable,
+        array $originalBatch,
+        array $toInsert,
+        array $skipped
+    ): array {
+        if (empty($skipped)) {
+            return [$toInsert, $skipped];
+        }
+
+        $mappedIds = array_values(array_filter(array_map(
+            static fn (array $record): ?string => isset($record['new_id']) ? (string) $record['new_id'] : null,
+            $skipped
+        )));
+
+        if (empty($mappedIds)) {
+            return [$toInsert, $skipped];
+        }
+
+        try {
+            $existingIds = Db::connection($targetConnection)
+                ->table($targetTable)
+                ->whereIn('id', $mappedIds)
+                ->pluck('id')
+                ->map(static fn (mixed $id): string => (string) $id)
+                ->all();
+        } catch (Throwable) {
+            return [$toInsert, $skipped];
+        }
+
+        $existing = array_fill_keys($existingIds, true);
+        $recordsByLegacyId = [];
+
+        foreach ($originalBatch as $record) {
+            if (isset($record['legacy_id'])) {
+                $recordsByLegacyId[(string) $record['legacy_id']] = $record;
+            }
+        }
+
+        $remainingSkipped = [];
+        foreach ($skipped as $record) {
+            $newId = isset($record['new_id']) ? (string) $record['new_id'] : '';
+            $legacyId = isset($record['legacy_id']) ? (string) $record['legacy_id'] : '';
+
+            if ($newId !== '' && isset($existing[$newId])) {
+                $remainingSkipped[] = $record;
+                continue;
+            }
+
+            if ($legacyId !== '' && isset($recordsByLegacyId[$legacyId])) {
+                $toInsert[] = $recordsByLegacyId[$legacyId];
+                continue;
+            }
+
+            $remainingSkipped[] = $record;
+        }
+
+        return [$toInsert, $remainingSkipped];
+    }
+
+    /**
+     * O destino compartilha usuários entre contratos. Quando o migrator local é
+     * recriado, os mappings somem, mas os users já existentes continuam no
+     * conciliador_web. Para não bater na unique de email, reaproveitamos o user
+     * existente e recriamos o mapping do legacy_id para o id atual.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<string, string>}
+     */
+    private function reuseExistingUsersByEmail(
+        string $entity,
+        string $targetConnection,
+        string $targetTable,
+        array $batch
+    ): array {
+        if ($entity !== 'users' || $targetTable !== 'users' || empty($batch)) {
+            return [$batch, []];
+        }
+
+        $emailsByIndex = [];
+        foreach ($batch as $index => $record) {
+            $legacyId = isset($record['legacy_id']) ? (string) $record['legacy_id'] : '';
+            $email = strtolower(trim((string) ($record['email'] ?? '')));
+
+            if ($legacyId === '' || $email === '') {
+                continue;
+            }
+
+            $emailsByIndex[$index] = $email;
+        }
+
+        if (empty($emailsByIndex)) {
+            return [$batch, []];
+        }
+
+        $existingRows = Db::connection($targetConnection)
+            ->table($targetTable)
+            ->select(['id', 'email'])
+            ->whereIn(Db::raw('LOWER(email)'), array_values(array_unique($emailsByIndex)))
+            ->get();
+
+        $existingByEmail = [];
+        foreach ($existingRows as $row) {
+            $row = (array) $row;
+            $email = strtolower(trim((string) ($row['email'] ?? '')));
+
+            if ($email !== '' && ! empty($row['id'])) {
+                $existingByEmail[$email] = (string) $row['id'];
+            }
+        }
+
+        if (empty($existingByEmail)) {
+            return [$batch, []];
+        }
+
+        $remaining = [];
+        $reusedMappings = [];
+
+        foreach ($batch as $index => $record) {
+            $legacyId = isset($record['legacy_id']) ? (string) $record['legacy_id'] : '';
+            $email = $emailsByIndex[$index] ?? null;
+
+            if ($legacyId !== '' && $email !== null && isset($existingByEmail[$email])) {
+                $reusedMappings[$legacyId] = $existingByEmail[$email];
+                continue;
+            }
+
+            $remaining[] = $record;
+        }
+
+        return [$remaining, $reusedMappings];
     }
 
     private function runSpecialHandler(

@@ -44,6 +44,11 @@ class ContractSource extends AbstractLegacySource
         return [];
     }
 
+    public function hasContractId(): bool
+    {
+        return false;
+    }
+
     /**
      * SQL sem cursores de paginação: retorna a linha única do contrato.
      * Nunca chamado diretamente pelo pipeline — paginate() é sobrescrito.

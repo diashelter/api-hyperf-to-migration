@@ -40,6 +40,11 @@ class UserSource extends AbstractLegacySource
         return [];
     }
 
+    public function hasContractId(): bool
+    {
+        return false;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

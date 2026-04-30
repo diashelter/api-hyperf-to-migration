@@ -73,6 +73,13 @@ class LookupCacheService
             ];
         }
 
+        $externalIds = array_column($records, 'external_id');
+        Db::table('lookup_cache')
+            ->where('entity', $entity)
+            ->where('environment', $env)
+            ->whereNotIn('external_id', $externalIds)
+            ->delete();
+
         $chunks = array_chunk($records, 500);
         foreach ($chunks as $chunk) {
             Db::table('lookup_cache')->upsert(
@@ -110,6 +117,7 @@ class LookupCacheService
             ->where('entity', $entity)
             ->where('label', (string) $label)
             ->where('environment', $this->getEnvironment())
+            ->orderByDesc('updated_at')
             ->value('external_id');
 
         return $row !== null ? (string) $row : null;

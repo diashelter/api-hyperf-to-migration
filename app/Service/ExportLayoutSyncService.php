@@ -43,7 +43,7 @@ class ExportLayoutSyncService
 
         if (! empty($missingCodes)) {
             $newEntries = $this->insertMissingLayouts($legacyConnection, $missingCodes);
-            $existing = array_merge($existing, $newEntries);
+            $existing = array_replace($existing, $newEntries);
         }
 
         $this->ensureIdMappings($existing, $contractId);
@@ -139,7 +139,8 @@ class ExportLayoutSyncService
             Db::connection('default')->statement(
                 'INSERT INTO migration_id_mappings (id, entity, legacy_id, new_id, contract_id, created_at)
                  VALUES (gen_random_uuid(), \'layouts_admin\', :legacy_id, :new_id, :contract_id, NOW())
-                 ON CONFLICT ON CONSTRAINT uniq_entity_legacy_contract DO NOTHING',
+                 ON CONFLICT ON CONSTRAINT uniq_entity_legacy_contract
+                 DO UPDATE SET new_id = EXCLUDED.new_id',
                 [
                     'legacy_id'   => (string) $code,
                     'new_id'      => $uuid,

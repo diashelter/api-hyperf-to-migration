@@ -62,7 +62,6 @@ class MigrationJobController
         description: 'Cria e enfileira um job para migrar dados a partir de um banco legado. O valor de `legacy_db` é usado como nome do database legado a ser conectado.',
         tags: ['Status & Control'],
         security: [['apiKeyAuth' => []]],
-        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
@@ -106,16 +105,10 @@ class MigrationJobController
             throw new ValidationFailedException("The 'legacy_db' field is required.");
         }
 
-        $contractId = $this->getContractId();
-
-        if ($contractId === '') {
-            throw new ValidationFailedException("The 'X-Contract-Id' header or API key contract_id payload is required.");
-        }
-
-        // Valida whitelist + smoke test antes de aceitar o job. Falha aqui retorna 422.
+        // Valida smoke test antes de aceitar o job. Falha aqui retorna 422.
         $this->legacyConnectionFactory->connect($legacyDb);
 
-        $job = $this->jobService->create($legacyDb, $contractId);
+        $job = $this->jobService->create($legacyDb);
         $jobId = (string) $job->getAttribute('id');
 
         $this->queue->push(new RunDatabaseMigrationJob($jobId));
@@ -137,7 +130,6 @@ class MigrationJobController
         tags: ['Status & Control'],
         security: [['apiKeyAuth' => []]],
         parameters: [
-            new OA\Parameter(ref: '#/components/parameters/X-Contract-Id'),
             new OA\Parameter(
                 name: 'jobId',
                 in: 'path',
@@ -154,7 +146,7 @@ class MigrationJobController
                     properties: [
                         new OA\Property(property: 'job_id', type: 'string', format: 'uuid', example: '260439b0-9fd0-4b01-a931-ecf2677ed972'),
                         new OA\Property(property: 'legacy_db', type: 'string', example: 'cont_focons'),
-                        new OA\Property(property: 'contract_id', type: 'string', example: '660e8400-e29b-41d4-a716-446655440001'),
+                        new OA\Property(property: 'migration_scope', type: 'string', example: 'cont_focons', description: 'Namespace interno usado em migration_id_mappings; hoje é igual a legacy_db.'),
                         new OA\Property(property: 'status', type: 'string', example: 'processing'),
                         new OA\Property(property: 'current_entity', type: 'string', nullable: true, example: 'contracts'),
                         new OA\Property(
@@ -198,11 +190,19 @@ class MigrationJobController
 
     #[OA\Get(
         path: '/api/v1/migration/jobs',
-        summary: 'Listar jobs de migração do contrato',
-        description: 'Lista todos os jobs de migração associados ao contrato atual.',
+        summary: 'Listar jobs de migração',
+        description: 'Lista jobs de migração. Se `legacy_db` for informado na query string, filtra por esse banco legado.',
         tags: ['Status & Control'],
         security: [['apiKeyAuth' => []]],
-        parameters: [new OA\Parameter(ref: '#/components/parameters/X-Contract-Id')],
+        parameters: [
+            new OA\Parameter(
+                name: 'legacy_db',
+                in: 'query',
+                required: false,
+                description: 'Nome do database legado para filtrar a listagem.',
+                schema: new OA\Schema(type: 'string', example: 'cont_focons')
+            ),
+        ],
         responses: [
             new OA\Response(
                 response: 200,
@@ -213,7 +213,7 @@ class MigrationJobController
                         properties: [
                             new OA\Property(property: 'id', type: 'string', format: 'uuid', example: '260439b0-9fd0-4b01-a931-ecf2677ed972'),
                             new OA\Property(property: 'legacy_db', type: 'string', example: 'cont_focons'),
-                            new OA\Property(property: 'contract_id', type: 'string', example: '660e8400-e29b-41d4-a716-446655440001'),
+                            new OA\Property(property: 'migration_scope', type: 'string', example: 'cont_focons'),
                             new OA\Property(property: 'status', type: 'string', example: 'queued'),
                             new OA\Property(property: 'current_entity', type: 'string', nullable: true, example: 'contracts'),
                             new OA\Property(property: 'entity_progress', type: 'object'),
@@ -236,7 +236,6 @@ class MigrationJobController
                 )
             ),
             new OA\Response(response: 401, description: 'API key inválida', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
-            new OA\Response(response: 422, description: "Header 'X-Contract-Id' ausente", content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
             new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
             new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
         ]
@@ -244,17 +243,12 @@ class MigrationJobController
     #[GetMapping(path: 'jobs')]
     public function index(): PsrResponseInterface
     {
-        $contractId = $this->getContractId();
+        $legacyDb = trim((string) $this->request->input('legacy_db', ''));
 
-        if ($contractId === '') {
-            throw new ValidationFailedException("The 'X-Contract-Id' header or API key contract_id payload is required.");
-        }
-
-        return $this->response->json($this->jobService->listByContract($contractId));
-    }
-
-    private function getContractId(): string
-    {
-        return (string) $this->request->getAttribute('contract_id', $this->request->header('X-Contract-Id', ''));
+        return $this->response->json(
+            $legacyDb !== ''
+                ? $this->jobService->listByMigrationScope($legacyDb)
+                : $this->jobService->listRecent()
+        );
     }
 }

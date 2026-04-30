@@ -19,12 +19,16 @@ use function Hyperf\Support\now;
 
 class MigrationJobService
 {
-    public function create(string $legacyDb, string $contractId): MigrationJob
+    public function create(string $legacyDb, ?string $migrationScope = null): MigrationJob
     {
+        $migrationScope ??= $legacyDb;
+
         return MigrationJob::query()->create([
             'id' => Uuid::uuid4()->toString(),
             'legacy_db' => $legacyDb,
-            'contract_id' => $contractId,
+            // Column name kept for schema compatibility. In pull-mode this is
+            // the legacy database namespace, not the destination contracts.id.
+            'contract_id' => $migrationScope,
             'status' => 'queued',
             'entity_progress' => [],
             'totals' => ['inserted' => 0, 'failed' => 0, 'skipped' => 0],
@@ -137,6 +141,7 @@ class MigrationJobService
             'job_id' => $job->id,
             'legacy_db' => $job->legacy_db,
             'contract_id' => $job->contract_id,
+            'migration_scope' => $job->contract_id,
             'status' => $job->status,
             'current_entity' => $job->current_entity,
             'totals' => $job->totals ?? [],
@@ -148,13 +153,37 @@ class MigrationJobService
         ];
     }
 
-    public function listByContract(string $contractId, int $limit = 50): array
+    public function listRecent(int $limit = 50): array
     {
         return MigrationJob::query()
-            ->where('contract_id', $contractId)
             ->orderByDesc('created_at')
             ->limit($limit)
             ->get()
+            ->map(static function (MigrationJob $job): array {
+                $row = $job->toArray();
+                $row['migration_scope'] = $row['contract_id'] ?? null;
+                return $row;
+            })
             ->toArray();
+    }
+
+    public function listByMigrationScope(string $migrationScope, int $limit = 50): array
+    {
+        return MigrationJob::query()
+            ->where('contract_id', $migrationScope)
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get()
+            ->map(static function (MigrationJob $job): array {
+                $row = $job->toArray();
+                $row['migration_scope'] = $row['contract_id'] ?? null;
+                return $row;
+            })
+            ->toArray();
+    }
+
+    public function listByContract(string $contractId, int $limit = 50): array
+    {
+        return $this->listByMigrationScope($contractId, $limit);
     }
 }

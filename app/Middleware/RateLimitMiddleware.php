@@ -31,10 +31,7 @@ class RateLimitMiddleware implements MiddlewareInterface
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
-        $contractId = (string) $request->getAttribute(
-            'contract_id',
-            $request->getHeaderLine('X-Contract-Id') ?: 'anonymous'
-        );
+        $migrationScope = $this->resolveMigrationScope($request);
         $path = $request->getUri()->getPath();
 
         // 'rules-sharings' contém a substring 'rules', por isso comparamos com '/rules'
@@ -47,7 +44,7 @@ class RateLimitMiddleware implements MiddlewareInterface
             ? (int) env('MIGRATION_BULK_RATE_LIMIT', 30)
             : (int) env('MIGRATION_RATE_LIMIT', 60);
 
-        $key = "migration_rate:{$contractId}:" . ($isBulk ? 'bulk' : 'standard');
+        $key = "migration_rate:{$migrationScope}:" . ($isBulk ? 'bulk' : 'standard');
         $current = (int) $this->redis->incr($key);
 
         if ($current === 1) {
@@ -63,5 +60,31 @@ class RateLimitMiddleware implements MiddlewareInterface
         }
 
         return $handler->handle($request);
+    }
+
+    private function resolveMigrationScope(ServerRequestInterface $request): string
+    {
+        $scope = (string) $request->getAttribute('contract_id', '');
+
+        if ($scope !== '') {
+            return $scope;
+        }
+
+        $body = $request->getParsedBody();
+        if (is_array($body) && ! empty($body['legacy_db'])) {
+            return (string) $body['legacy_db'];
+        }
+
+        $queryParams = $request->getQueryParams();
+        if (! empty($queryParams['legacy_db'])) {
+            return (string) $queryParams['legacy_db'];
+        }
+
+        $legacyHeader = $request->getHeaderLine('X-Contract-Id');
+        if ($legacyHeader !== '') {
+            return $legacyHeader;
+        }
+
+        return 'anonymous';
     }
 }

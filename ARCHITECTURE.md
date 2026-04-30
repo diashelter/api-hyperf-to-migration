@@ -36,14 +36,13 @@ Rotas registradas por annotations em `MigrationJobController`:
 |---|---|---|---|
 | `POST` | `/api/v1/migration/database` | Sim | Cria e enfileira um job pull-mode |
 | `GET` | `/api/v1/migration/job/{jobId}` | Sim | Consulta status detalhado de um job |
-| `GET` | `/api/v1/migration/jobs` | Sim | Lista jobs do contrato informado |
+| `GET` | `/api/v1/migration/jobs` | Sim | Lista jobs recentes; aceita filtro opcional `legacy_db` |
 
 ### Request para criar job
 
 ```http
 POST /api/v1/migration/database
 X-Api-Key: <MIGRATION_API_KEY>
-X-Contract-Id: <contract-id>
 Content-Type: application/json
 
 {
@@ -70,7 +69,7 @@ Resposta esperada:
 Client / operador
       |
       | POST /api/v1/migration/database
-      | Headers: X-Api-Key, X-Contract-Id
+      | Headers: X-Api-Key
       | Body: { "legacy_db": "..." }
       v
 +-------------------------------------------------------+
@@ -84,7 +83,7 @@ Client / operador
 |                                                       |
 | MigrationJobController                                |
 |   - valida legacy_db                                  |
-|   - valida X-Contract-Id                              |
+|   - usa legacy_db como namespace interno da migracao  |
 |   - faz smoke test da conexao legada                  |
 |   - cria migration_jobs                               |
 |   - enfileira RunDatabaseMigrationJob                 |
@@ -179,11 +178,11 @@ POST /api/v1/migration/database
   |
   | 2. RateLimitMiddleware
   |    - usa Redis
-  |    - chave: migration_rate:{contractId}:standard
+  |    - chave: migration_rate:{legacy_db}:standard
   |
   | 3. MigrationJobController::dispatch()
   |    - le body.legacy_db
-  |    - le X-Contract-Id
+  |    - usa legacy_db como migration_scope
   |    - valida conexao no legado
   |    - cria migration_jobs(status=queued)
   |    - push RunDatabaseMigrationJob(jobId)
@@ -300,7 +299,7 @@ Para cada codigo encontrado, ele tambem garante um mapping:
 entity = layouts_admin
 legacy_id = <codigo fk_layoutexp>
 new_id = <uuid de layouts_admin>
-contract_id = <X-Contract-Id>
+contract_id = <legacy_db>
 ```
 
 Esse mapping e usado por `CompanyLayoutSource` para resolver
@@ -387,6 +386,7 @@ Comportamentos importantes:
 | Cenario | Comportamento |
 |---|---|
 | Reprocessar registro ja mapeado | Registro entra em `skipped` e nao e inserido de novo |
+| Mapping existe, mas a linha do destino foi removida | O pipeline detecta `new_id` ausente na tabela alvo, reinsere o registro e atualiza o mapping |
 | Reprocessar entidade `completed` | Orchestrator pula a entidade |
 | Job falha em uma entidade | Entidade e marcada como `failed`; o orchestrator continua as proximas |
 | Algum chunk falha no insert | `inserted`/`failed` sao acumulados; o erro fica em `entity_progress` |
@@ -434,8 +434,12 @@ Uso atual:
 
 - `X-Api-Key` e obrigatorio nos endpoints de migracao.
 - O valor recebido e comparado diretamente com `MIGRATION_API_KEY`.
-- `X-Contract-Id` e obrigatorio para criar/listar jobs e e usado como tenant
-  logico nos mappings e no progresso.
+- `X-Contract-Id` nao e mais necessario no pull-mode atual.
+- `legacy_db` e usado como namespace interno da migracao nas tabelas locais
+  (`migration_jobs.contract_id` e `migration_id_mappings.contract_id`).
+- O UUID real usado como `contract_id` nas tabelas de destino vem do registro
+  inserido em `contracts`, mapeado por `entity=contracts` e
+  `legacy_id=<legacy_db>`.
 - `RateLimitMiddleware` usa Redis por minuto.
 
 ### O que ainda nao esta conectado

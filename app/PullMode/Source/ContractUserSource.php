@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace App\PullMode\Source;
 
+use Hyperf\DbConnection\Db;
+
 /**
  * Source legada → `contract_user` (pivot N:N).
  *
@@ -52,6 +54,19 @@ class ContractUserSource extends AbstractLegacySource
     public function specialHandler(): ?string
     {
         return 'contract_users_pivot';
+    }
+
+    /**
+     * Pivot idempotente: em retries ou novos jobs, carregar todos os vinculos e
+     * deixar o insertOrIgnore() evitar duplicidade.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function paginate(string $connection, ?string $_lastId, int $_limit): array
+    {
+        $rows = Db::connection($connection)->select($this->sql());
+
+        return array_map(static fn ($r) => (array) $r, $rows);
     }
 
     public function sql(): string
