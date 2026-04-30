@@ -31,7 +31,7 @@ class RuleSource extends AbstractLegacySource
 
     public function chunkSize(): int
     {
-        return 20000;
+        return 5000;
     }
 
     public function fkMap(): array
