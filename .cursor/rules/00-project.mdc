@@ -1,0 +1,35 @@
+---
+description: Project overview and entry pointers — always loaded
+alwaysApply: true
+---
+
+# conciliador-migrator
+
+API HTTP em **Hyperf 3.1 / Swoole 5** (PHP 8.1+) com PostgreSQL. Hoje opera em **pull-mode**: recebe um `legacy_db`, cria um job em `migration_jobs`, fila Redis processa, worker lê o legado e insere no `conciliador_web`.
+
+## Dois bancos — sempre seja explícito
+
+- `default` (`DB_*`): schema do migrador (`migration_jobs`, `migration_id_mappings`, `lookup_cache`).
+- `conciliador_web` (`DB_WEB_*`): banco de produção que recebe os dados.
+- `legacy_database`: connection dinâmica configurada em runtime para ler o legado.
+
+`Db::table(...)` sem connection cai em `default` — quase nunca é o que se quer.
+
+## Comandos
+
+Tudo dentro de Docker. Nunca rode `php` ou `composer` direto no host.
+
+```bash
+docker exec conciliador-migrator composer test
+docker exec conciliador-migrator composer cs-fix
+docker exec conciliador-migrator composer analyse
+docker exec conciliador-migrator php bin/hyperf.php migrate
+```
+
+## Documentação canônica
+
+A fonte única vive em `docs/ai/`. Outras regras nesta pasta importam esses arquivos via `@file`. Para detalhes consulte:
+
+@docs/ai/overview.md
+@docs/ai/database.md
+@docs/ai/security.md

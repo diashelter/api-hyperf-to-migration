@@ -1,0 +1,5 @@
+---
+description: API key auth, rate limiting, audit, and the full "do not" rules. Apply when handling auth, middlewares, secrets, or bulk DB operations.
+---
+
+@docs/ai/security.md

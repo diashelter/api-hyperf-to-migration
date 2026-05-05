@@ -1,0 +1,9 @@
+---
+description: PHP code style, naming conventions, DI pattern, response format
+globs:
+  - "app/**/*.php"
+  - "test/**/*.php"
+  - "config/**/*.php"
+---
+
+@docs/ai/styleguide.md

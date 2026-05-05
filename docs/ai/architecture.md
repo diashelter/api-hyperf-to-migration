@@ -1,23 +1,18 @@
-# ARCHITECTURE.md - conciliador-migrator
+# Architecture — conciliador-migrator
 
-## Proposito
+## Propósito
 
-`conciliador-migrator` e uma API HTTP em Hyperf/Swoole que migra dados de um
-banco legado PostgreSQL para o banco de destino `conciliador_web`.
+`conciliador-migrator` é uma API HTTP em Hyperf/Swoole que migra dados de um banco legado PostgreSQL para o banco de destino `conciliador_web`.
 
-O desenho atual e **pull-mode**:
+O desenho atual é **pull-mode**:
 
 - o cliente informa qual database legado deve ser migrado;
 - a API cria um job em `migration_jobs`;
-- o job e executado por uma fila Redis;
-- o worker conecta no legado, le as tabelas de origem via `Source` classes,
-  transforma os registros e insere no `conciliador_web`;
-- IDs legados sao mapeados para UUIDs novos em `migration_id_mappings`, o que
-  permite retomar jobs e resolver FKs entre entidades.
+- o job é executado por uma fila Redis;
+- o worker conecta no legado, lê as tabelas de origem via classes `Source`, transforma os registros e insere no `conciliador_web`;
+- IDs legados são mapeados para UUIDs novos em `migration_id_mappings`, o que permite retomar jobs e resolver FKs entre entidades.
 
-Nao existe mais, no codigo atual, uma API publica de batch por entidade como
-`POST /api/v1/migration/{entity}`. Essa arquitetura antiga ainda tem algumas
-classes e tabelas auxiliares no repositorio, mas nao participa do fluxo vivo.
+Não existe mais, no código atual, uma API pública de batch por entidade como `POST /api/v1/migration/{entity}`. Essa arquitetura antiga ainda tem algumas classes e tabelas auxiliares no repositório, mas não participa do fluxo vivo.
 
 ---
 
@@ -25,14 +20,14 @@ classes e tabelas auxiliares no repositorio, mas nao participa do fluxo vivo.
 
 Rotas registradas manualmente em `config/routes.php`:
 
-| Metodo | Rota | Auth | Finalidade |
+| Método | Rota | Auth | Finalidade |
 |---|---|---|---|
-| `GET` | `/` | Nao | Informacoes basicas do servico |
-| `GET` | `/health` | Nao | Health check simples |
+| `GET` | `/` | Não | Informações básicas do serviço |
+| `GET` | `/health` | Não | Health check simples |
 
 Rotas registradas por annotations em `MigrationJobController`:
 
-| Metodo | Rota | Auth | Finalidade |
+| Método | Rota | Auth | Finalidade |
 |---|---|---|---|
 | `POST` | `/api/v1/migration/database` | Sim | Cria e enfileira um job pull-mode |
 | `GET` | `/api/v1/migration/job/{jobId}` | Sim | Consulta status detalhado de um job |
@@ -63,7 +58,7 @@ Resposta esperada:
 
 ---
 
-## Arquitetura de Alto Nivel
+## Arquitetura de alto nível
 
 ```text
 Client / operador
@@ -76,7 +71,7 @@ Client / operador
 | Hyperf HTTP Server (Swoole, porta 9501)               |
 |                                                       |
 | ApiTokenMiddleware                                    |
-|   - compara X-Api-Key diretamente com MIGRATION_API_KEY|
+|   - compara X-Api-Key com MIGRATION_API_KEY           |
 |                                                       |
 | RateLimitMiddleware                                   |
 |   - contador Redis por contract/endpoint              |
@@ -122,52 +117,45 @@ Client / operador
 |   mappings         |              | contract_user      |
 | lookup_cache       |              | plans              |
 |                    |              | plan_items         |
-| tabelas legadas    |              | rules_sharings     |
-| ainda existentes:  |              | layouts            |
-| migration_batches  |              | companies          |
-| migration_audit_*  |              | company_layout     |
+| tabelas legadas:   |              | rules_sharings     |
+| migration_batches  |              | layouts            |
+| migration_audit_*  |              | companies          |
+|                    |              | company_layout     |
 +--------------------+              +--------------------+
 ```
 
 ---
 
-## Bancos e Tabelas do Migrador
+## Bancos e tabelas do migrador
 
 ### `default`
 
-Tabelas criadas pelas migrations do proprio migrador.
+Tabelas criadas pelas migrations do próprio migrador.
 
 | Tabela | Status atual | Finalidade |
 |---|---|---|
 | `migration_jobs` | Ativa | Estado do job pull-mode, entidade atual, progresso por entidade, totais e erros |
-| `migration_id_mappings` | Ativa | Mapeia `(entity, legacy_id, contract_id)` para `new_id`; base de idempotencia e FK |
-| `lookup_cache` | Ativa | Cache local para dados estaticos do destino, como `roles`, `status`, `layouts_admin` e `permissions` |
-| `migration_batches` | Legado/inativa | Sobrou do fluxo push-mode por batches; `MigrationBatchService` nao e chamado pelo fluxo atual |
-| `migration_audit_logs` | Legado/inativa | Estrutura para auditoria por request do push-mode; `MigrationAuditService` nao e chamado pelo pull-mode |
-| `migration_record_logs` | Legado/inativa | Logs por registro do push-mode; nao sao gerados pelo fluxo atual |
+| `migration_id_mappings` | Ativa | Mapeia `(entity, legacy_id, contract_id)` para `new_id`; base de idempotência e FK |
+| `lookup_cache` | Ativa | Cache local para dados estáticos do destino, como `roles`, `status`, `layouts_admin` e `permissions` |
+| `migration_batches` | Legado/inativa | Sobrou do fluxo push-mode por batches; `MigrationBatchService` não é chamado pelo fluxo atual |
+| `migration_audit_logs` | Legado/inativa | Estrutura para auditoria por request do push-mode; `MigrationAuditService` não é chamado pelo pull-mode |
+| `migration_record_logs` | Legado/inativa | Logs por registro do push-mode; não são gerados pelo fluxo atual |
 
 ### `conciliador_web`
 
-Banco de destino. O migrador insere diretamente nas tabelas de negocio usando
-Query Builder (`Db::connection('conciliador_web')->table(...)->insert(...)`).
+Banco de destino. O migrador insere diretamente nas tabelas de negócio usando Query Builder (`Db::connection('conciliador_web')->table(...)->insert(...)`).
 
-O fluxo ativo faz `INSERT` nas entidades cadastradas no registry. Existe tambem
-um handler especial para `permission_users` via DELETE, mas a Source
-correspondente esta desligada no registry.
+O fluxo ativo faz `INSERT` nas entidades cadastradas no registry. Existe também um handler especial para `permission_users` via DELETE, mas a Source correspondente está desligada no registry.
 
 ### `legacy_database`
 
-Conexao dinamica baseada em `config/autoload/databases.php`.
-`LegacyConnectionFactory::connect($legacyDb)` troca apenas o campo `database`
-da connection `legacy_database`, roda `SELECT 1` e devolve o nome da conexao.
+Conexão dinâmica baseada em `config/autoload/databases.php`. `LegacyConnectionFactory::connect($legacyDb)` troca apenas o campo `database` da connection `legacy_database`, roda `SELECT 1` e devolve o nome da conexão.
 
-Observacao: o `.env.example` menciona uma whitelist `LEGACY_DBS`, mas a
-implementacao atual nao aplica essa whitelist; o nome recebido em `legacy_db`
-e usado diretamente como database da connection legada.
+Observação: o `.env.example` menciona uma whitelist `LEGACY_DBS`, mas a implementação atual não aplica essa whitelist; o nome recebido em `legacy_db` é usado diretamente como database da connection legada.
 
 ---
 
-## Fluxo de Job Pull-Mode
+## Fluxo de job pull-mode
 
 ```text
 POST /api/v1/migration/database
@@ -181,9 +169,9 @@ POST /api/v1/migration/database
   |    - chave: migration_rate:{legacy_db}:standard
   |
   | 3. MigrationJobController::dispatch()
-  |    - le body.legacy_db
+  |    - lê body.legacy_db
   |    - usa legacy_db como migration_scope
-  |    - valida conexao no legado
+  |    - valida conexão no legado
   |    - cria migration_jobs(status=queued)
   |    - push RunDatabaseMigrationJob(jobId)
   |    - retorna 202 + Location
@@ -205,7 +193,7 @@ Redis async-queue
   |    - markCompleted() ou completed_with_errors
 ```
 
-Configuracao da fila:
+Configuração da fila:
 
 - driver Redis (`hyperf/async-queue`);
 - consumer registrado em `config/autoload/processes.php`;
@@ -216,22 +204,21 @@ Configuracao da fila:
 
 ---
 
-## Pipeline de Entidade
+## Pipeline de entidade
 
-Cada entidade do pull-mode e definida por uma classe em `app/PullMode/Source`.
-Essas classes informam:
+Cada entidade do pull-mode é definida por uma classe em `app/PullMode/Source`. Essas classes informam:
 
-- nome logico da entidade (`entity()`);
+- nome lógico da entidade (`entity()`);
 - tabela de destino (`targetTable()`);
 - SQL de leitura do legado (`sql()`);
 - tamanho de chunk (`chunkSize()`);
 - mapa de FKs legadas (`fkMap()`);
-- estrategia de UUID (`idStrategy()`);
+- estratégia de UUID (`idStrategy()`);
 - se strings devem ser normalizadas (`normalizeStrings()`);
 - se a tabela possui `contract_id` (`hasContractId()`);
-- handler especial, quando o fluxo padrao nao serve (`specialHandler()`).
+- handler especial, quando o fluxo padrão não serve (`specialHandler()`).
 
-Pipeline padrao em `EntityMigrator`:
+Pipeline padrão em `EntityMigrator`:
 
 ```text
 para cada Source ativa:
@@ -240,11 +227,11 @@ para cada Source ativa:
   3. carregar linhas do legado via Source::paginate()
   4. aplicar Source::transformRow()
   5. filtrar duplicados por migration_id_mappings
-  6. pre-aquecer cache de FKs com IdMappingService::prewarm()
+  6. pré-aquecer cache de FKs com IdMappingService::prewarm()
   7. preparar registros:
      - normalizar strings
      - remover legacy_id
-     - gerar UUID v4/v7 quando necessario
+     - gerar UUID v4/v7 quando necessário
      - bcrypt em password quando existir
      - preencher created_at/updated_at
      - resolver legacy_*_id para *_id
@@ -253,31 +240,27 @@ para cada Source ativa:
  10. atualizar entity_progress e totals do job
 ```
 
-### Paginacao
+### Paginação
 
-`AbstractLegacySource::paginate()` detecta se o SQL contem `:last_id` e
-`:limit`.
+`AbstractLegacySource::paginate()` detecta se o SQL contém `:last_id` e `:limit`.
 
-- Se contem, usa keyset pagination.
-- Se nao contem, carrega tudo de uma vez na primeira execucao.
-- Em retomadas, quando `last_id` ja existe, queries sem keyset retornam vazio.
+- Se contém, usa keyset pagination.
+- Se não contém, carrega tudo de uma vez na primeira execução.
+- Em retomadas, quando `last_id` já existe, queries sem keyset retornam vazio.
 
-Isso significa que `chunkSize()` so tem efeito real nas Sources cujo SQL usa
-`:last_id` e `:limit`.
+Isso significa que `chunkSize()` só tem efeito real nas Sources cujo SQL usa `:last_id` e `:limit`.
 
-### Validacao
+### Validação
 
-Varias Sources declaram `validationRules()`, mas o pipeline atual nao chama
-essas regras. Hoje, inconsistencias geralmente aparecem como erro de insert ou
-erro de FK/resolucao, nao como erro de validacao previo por registro.
+Várias Sources declaram `validationRules()`, mas o pipeline atual não chama essas regras. Hoje, inconsistências geralmente aparecem como erro de insert ou erro de FK/resolução, não como erro de validação prévio por registro.
 
 ---
 
-## Sources Ativas
+## Sources ativas
 
 Ordem atual em `EntityMetadataRegistry::sources()`:
 
-| Ordem | Source | Entity | Origem principal | Destino | Observacoes |
+| Ordem | Source | Entity | Origem principal | Destino | Observações |
 |---:|---|---|---|---|---|
 | 1 | `ContractSource` | `contracts` | `contrato` | `contracts` | Uma linha por database legado; usa `CURRENT_DATABASE()` como `legacy_id` |
 | 2 | `UserSource` | `users` | `usuarios` | `users` | Ignora `suporte@integradorcontabil.net.br`; senha passa por bcrypt |
@@ -285,15 +268,13 @@ Ordem atual em `EntityMetadataRegistry::sources()`:
 | 4 | `PlanSource` | `plans` | `pcontasconc` | `plans` | Depende de `contracts` |
 | 5 | `RulesSharingSource` | `rules_sharings` | `plano_contas` | `rules_sharings` | Depende de `contracts` |
 | 6 | `LayoutSource` | `layouts` | `layout` + `layout_empresa` | `layouts` | Depende de `contracts`; pode referenciar outro layout |
-| 7 | `PlanItemSource` | `plan_items` | `pcontasconc_item` | `plan_items` | Keyset pagination; nao possui `contract_id` |
+| 7 | `PlanItemSource` | `plan_items` | `pcontasconc_item` | `plan_items` | Keyset pagination; não possui `contract_id` |
 | 8 | `CompanySource` | `companies` | `empresas` | `companies` | Depende de `contracts`, `plans`, `rules_sharings` |
-| 9 | `CompanyLayoutSource` | `company_layout` | `layout_empresa` + `layout` | `company_layout` | Depende de `companies`, `layouts`, `layouts_admin`; nao possui `contract_id` |
+| 9 | `CompanyLayoutSource` | `company_layout` | `layout_empresa` + `layout` | `company_layout` | Depende de `companies`, `layouts`, `layouts_admin`; não possui `contract_id` |
 
 ### Export layouts
 
-Antes de migrar as entidades, `ExportLayoutSyncService` garante que os codigos
-`fk_layoutexp` usados em `layout_empresa` existam em `layouts_admin` no destino.
-Para cada codigo encontrado, ele tambem garante um mapping:
+Antes de migrar as entidades, `ExportLayoutSyncService` garante que os códigos `fk_layoutexp` usados em `layout_empresa` existam em `layouts_admin` no destino. Para cada código encontrado, ele também garante um mapping:
 
 ```text
 entity = layouts_admin
@@ -302,16 +283,13 @@ new_id = <uuid de layouts_admin>
 contract_id = <legacy_db>
 ```
 
-Esse mapping e usado por `CompanyLayoutSource` para resolver
-`legacy_layout_exp`.
+Esse mapping é usado por `CompanyLayoutSource` para resolver `legacy_layout_exp`.
 
 ---
 
-## Sources Existentes Mas Desligadas
+## Sources existentes mas desligadas
 
-As classes abaixo existem, mas nao sao executadas enquanto nao forem
-descomentadas/adicionadas em `EntityMetadataRegistry::sources()` na ordem correta
-de dependencias:
+As classes abaixo existem, mas não são executadas enquanto não forem descomentadas/adicionadas em `EntityMetadataRegistry::sources()` na ordem correta de dependências:
 
 | Source | Entity | Destino |
 |---|---|---|
@@ -327,7 +305,7 @@ de dependencias:
 | `UserCompanyRestrictionSource` | `user_company_restrictions` | `user_company_restrictions` |
 | `UserPermissionSource` | `user_permissions` | `permission_users` |
 
-Tambem existem Sources que nao aparecem no registry atual:
+Também existem Sources que não aparecem no registry atual:
 
 | Source | Entity | Destino |
 |---|---|---|
@@ -336,7 +314,7 @@ Tambem existem Sources que nao aparecem no registry atual:
 
 ---
 
-## Handlers Especiais
+## Handlers especiais
 
 ### `contract_users_pivot`
 
@@ -344,66 +322,60 @@ Usado por `ContractUserSource`.
 
 Fluxo:
 
-1. le usuarios do legado;
+1. lê usuários do legado;
 2. resolve `legacy_user_id` em `users`;
 3. resolve `legacy_contract_id` em `contracts`;
 4. resolve `legacy_role_id` (`owner` ou `user`) em `lookup_cache.roles`;
 5. insere em `contract_user` com `insertOrIgnore()`;
-6. nao grava `migration_id_mappings`, porque pivot nao tem ID proprio.
+6. não grava `migration_id_mappings`, porque pivot não tem ID próprio.
 
 ### `user_permissions_delete`
 
-Implementado em `EntityMigrator`, mas a Source esta desligada.
+Implementado em `EntityMigrator`, mas a Source está desligada.
 
 Fluxo previsto:
 
 1. resolve o contrato atual;
-2. le `usuario_permissao`;
-3. resolve usuarios migrados;
-4. apaga de `permission_users` os registros daquele contrato/usuario.
+2. lê `usuario_permissao`;
+3. resolve usuários migrados;
+4. apaga de `permission_users` os registros daquele contrato/usuário.
 
-E idempotente: deletar novamente nao falha quando nao ha registros.
+É idempotente: deletar novamente não falha quando não há registros.
 
 ---
 
-## Idempotencia e Retomada
+## Idempotência e retomada
 
-O sistema usa duas camadas de idempotencia:
+O sistema usa duas camadas de idempotência:
 
 1. `migration_id_mappings`
-   - evita inserir novamente registros cujo `(entity, legacy_id, contract_id)`
-     ja tem `new_id`;
+   - evita inserir novamente registros cujo `(entity, legacy_id, contract_id)` já tem `new_id`;
    - resolve FKs entre entidades migradas em momentos diferentes.
 
 2. `migration_jobs.entity_progress`
    - guarda status por entidade;
    - guarda `last_id`;
    - guarda acumulados `inserted`, `failed`, `skipped`;
-   - permite retry do job sem recomecar tudo.
+   - permite retry do job sem recomeçar tudo.
 
 Comportamentos importantes:
 
-| Cenario | Comportamento |
+| Cenário | Comportamento |
 |---|---|
-| Reprocessar registro ja mapeado | Registro entra em `skipped` e nao e inserido de novo |
+| Reprocessar registro já mapeado | Registro entra em `skipped` e não é inserido de novo |
 | Mapping existe, mas a linha do destino foi removida | O pipeline detecta `new_id` ausente na tabela alvo, reinsere o registro e atualiza o mapping |
 | Reprocessar entidade `completed` | Orchestrator pula a entidade |
-| Job falha em uma entidade | Entidade e marcada como `failed`; o orchestrator continua as proximas |
-| Algum chunk falha no insert | `inserted`/`failed` sao acumulados; o erro fica em `entity_progress` |
+| Job falha em uma entidade | Entidade é marcada como `failed`; o orchestrator continua as próximas |
+| Algum chunk falha no insert | `inserted`/`failed` são acumulados; o erro fica em `entity_progress` |
 | Retry da fila | Seguro em tese, porque o job consulta progresso e mappings |
 
-Observacao operacional: `IdMappingService::storeBatch()` grava mappings quando o
-insert retorna sucesso parcial. Como o insert e feito em chunks paralelos, se um
-chunk falhar e outro inserir, os mappings gerados para o batch preparado podem
-nao distinguir exatamente quais registros pertenciam ao chunk que falhou. Ao
-ampliar uso em alto volume, vale revisar esse ponto.
+Observação operacional: `IdMappingService::storeBatch()` grava mappings quando o insert retorna sucesso parcial. Como o insert é feito em chunks paralelos, se um chunk falhar e outro inserir, os mappings gerados para o batch preparado podem não distinguir exatamente quais registros pertenciam ao chunk que falhou. Ao ampliar uso em alto volume, vale revisar esse ponto.
 
 ---
 
-## Lookup Cache
+## Lookup cache
 
-`LookupCacheService` popula a tabela `lookup_cache` lendo dados de
-`conciliador_web`.
+`LookupCacheService` popula a tabela `lookup_cache` lendo dados de `conciliador_web`.
 
 Comando:
 
@@ -423,26 +395,22 @@ Uso atual:
 
 - `ContractSource` resolve `status_contract` usando `lookup_cache.status`;
 - `ContractUserSource` resolve role `owner`/`user` usando `lookup_cache.roles`;
-- `CompanyLayoutSource` usa mappings de `layouts_admin`, alimentados por
-  `ExportLayoutSyncService`.
+- `CompanyLayoutSource` usa mappings de `layouts_admin`, alimentados por `ExportLayoutSyncService`.
 
 ---
 
-## Seguranca
+## Segurança
 
-### Implementacao atual
+### Implementação atual
 
-- `X-Api-Key` e obrigatorio nos endpoints de migracao.
-- O valor recebido e comparado diretamente com `MIGRATION_API_KEY`.
-- `X-Contract-Id` nao e mais necessario no pull-mode atual.
-- `legacy_db` e usado como namespace interno da migracao nas tabelas locais
-  (`migration_jobs.contract_id` e `migration_id_mappings.contract_id`).
-- O UUID real usado como `contract_id` nas tabelas de destino vem do registro
-  inserido em `contracts`, mapeado por `entity=contracts` e
-  `legacy_id=<legacy_db>`.
+- `X-Api-Key` é obrigatório nos endpoints de migração.
+- O valor recebido é comparado diretamente com `MIGRATION_API_KEY`.
+- `X-Contract-Id` não é mais necessário no pull-mode atual.
+- `legacy_db` é usado como namespace interno da migração nas tabelas locais (`migration_jobs.contract_id` e `migration_id_mappings.contract_id`).
+- O UUID real usado como `contract_id` nas tabelas de destino vem do registro inserido em `contracts`, mapeado por `entity=contracts` e `legacy_id=<legacy_db>`.
 - `RateLimitMiddleware` usa Redis por minuto.
 
-### O que ainda nao esta conectado
+### O que ainda não está conectado
 
 `ApiKeyService` possui suporte a payload AES-256-GCM no formato:
 
@@ -450,14 +418,11 @@ Uso atual:
 v1.<iv>.<tag>.<ciphertext>
 ```
 
-Ele tambem suporta `MIGRATION_API_KEYS`, `contract_id`, `user_id` e `exp` no
-payload descriptografado. Porem, no codigo atual, `ApiTokenMiddleware` nao usa
-`ApiKeyService`; portanto essas variaveis e esse formato ainda nao fazem parte
-do fluxo real.
+Ele também suporta `MIGRATION_API_KEYS`, `contract_id`, `user_id` e `exp` no payload descriptografado. Porém, no código atual, `ApiTokenMiddleware` não usa `ApiKeyService`; portanto essas variáveis e esse formato ainda não fazem parte do fluxo real.
 
 ---
 
-## Status e Erros
+## Status e erros
 
 ### Status de job
 
@@ -469,7 +434,7 @@ do fluxo real.
 - `completed_with_errors`
 - `failed`
 
-`entity_progress` e um JSON por entidade com campos como:
+`entity_progress` é um JSON por entidade com campos como:
 
 ```json
 {
@@ -485,14 +450,11 @@ do fluxo real.
 }
 ```
 
-### Tratamento de excecoes
+### Tratamento de exceções
 
-`AppExceptionHandler` renderiza `ApiException` como RFC 7807
-(`application/problem+json`). Excecoes nao mapeadas viram HTTP 500 generico.
+`AppExceptionHandler` renderiza `ApiException` como RFC 7807 (`application/problem+json`). Exceções não mapeadas viram HTTP 500 genérico.
 
-`DiscordNotificationService::notifyException()` e chamado pelo handler global
-quando notificacoes estao habilitadas. `notifyMigration()` existe, mas nao e
-chamado no fluxo atual.
+`DiscordNotificationService::notifyException()` é chamado pelo handler global quando notificações estão habilitadas. `notifyMigration()` existe, mas não é chamado no fluxo atual.
 
 ---
 
@@ -500,57 +462,36 @@ chamado no fluxo atual.
 
 O pipeline usa `RecordPreparation::recordPrepGenerateId()`:
 
-| Estrategia | Uso |
+| Estratégia | Uso |
 |---|---|
-| `uuid4` | Padrao para a maioria das entidades |
-| `uuid7` | Disponivel para Sources de alto volume, como `ImportRecordSource` e `ConfrontationRecordSource`, atualmente desligadas |
+| `uuid4` | Padrão para a maioria das entidades |
+| `uuid7` | Disponível para Sources de alto volume, como `ImportRecordSource` e `ConfrontationRecordSource`, atualmente desligadas |
 
-Se o registro ja vier com `id`, o pipeline preserva esse valor.
+Se o registro já vier com `id`, o pipeline preserva esse valor.
 
 ---
 
-## Componentes Legados / Inativos
+## Componentes legados / inativos
 
-Itens presentes no repositorio que nao fazem parte do fluxo pull-mode atual:
+Itens presentes no repositório que não fazem parte do fluxo pull-mode atual:
 
 - `MigrationBatchService` e tabela `migration_batches`;
 - `MigrationAuditService`, `migration_audit_logs` e `migration_record_logs`;
-- schemas Swagger de batch por entidade (`MigrationBatchRequest`,
-  `SyncMigrationResponse`, `AsyncMigrationResponse`, `MigrationBatchStatus`,
-  `IdMappingRequest`, `IdMappingResponse`);
-- `IndexController`, pois `/` e registrado por closure em `routes.php`;
+- schemas Swagger de batch por entidade (`MigrationBatchRequest`, `SyncMigrationResponse`, `AsyncMigrationResponse`, `MigrationBatchStatus`, `IdMappingRequest`, `IdMappingResponse`);
+- `IndexController`, pois `/` é registrado por closure em `routes.php`;
 - `BatchTooLargeException`, `EmptyBatchException`, `UnauthorizedException`;
-- dependencia `firebase/php-jwt`;
-- dependencia `ylnwqm/hyperf-batch`;
-- dependencia/config de `hyperf/cache`, salvo se for usada por infraestrutura
-  futura;
-- pacote `hyperf/rate-limit`, pois o rate limit atual e middleware proprio com
-  Redis;
-- documentacao antiga que fala em endpoints por entidade e batches enviados pelo
-  cliente.
+- dependência `firebase/php-jwt`;
+- dependência `ylnwqm/hyperf-batch`;
+- dependência/config de `hyperf/cache`, salvo se for usada por infraestrutura futura;
+- pacote `hyperf/rate-limit`, pois o rate limit atual é middleware próprio com Redis;
+- documentação antiga que fala em endpoints por entidade e batches enviados pelo cliente.
 
-Antes de remover qualquer item, confirme se nao ha uso planejado em branch ou
-deploy externo. Algumas classes inativas podem estar guardadas como base para
-reativar entidades de alto volume.
+Antes de remover qualquer item, confirme se não há uso planejado em branch ou deploy externo. Algumas classes inativas podem estar guardadas como base para reativar entidades de alto volume.
 
 ---
 
-## Regras Para Adicionar Uma Nova Entidade
+## Regras para adicionar uma nova entidade
 
-1. Criar uma nova classe em `app/PullMode/Source` estendendo
-   `AbstractLegacySource`.
-2. Definir `entity()`, `targetTable()` e `sql()`.
-3. Usar aliases no SQL com nomes finais esperados no destino.
-4. Expor IDs legados como `legacy_id` e FKs como `legacy_<nome>_id`.
-5. Definir `fkMap()` apontando cada FK legada para a entidade do mapping.
-6. Usar keyset pagination (`:last_id`, `:limit`) para tabelas grandes.
-7. Sobrescrever `transformRow()` apenas para regras que nao cabem no SQL.
-8. Sobrescrever `hasContractId()` para `false` quando a tabela destino nao tiver
-   coluna `contract_id`.
-9. Escolher `uuid7` para entidades de volume muito alto, se fizer sentido para o
-   indice do destino.
-10. Adicionar a Source em `EntityMetadataRegistry::sources()` depois de todas as
-    dependencias de FK.
+Veja `docs/ai/workflows.md` na seção "Adicionar uma nova entidade ao pull-mode" para o passo a passo completo.
 
-Nao paralelizar entidades no orchestrator: a ordem do registry e parte do
-contrato de consistencia por FK.
+Resumo: criar Source em `app/PullMode/Source`, definir `entity()`/`targetTable()`/`sql()`, configurar `fkMap()`, registrar em `EntityMetadataRegistry::sources()` **depois** de todas as dependências. **Não paralelize entidades** — a ordem do registry é parte do contrato de consistência por FK.

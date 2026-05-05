@@ -1,0 +1,7 @@
+---
+description: PHPUnit + Mockery + UnitTestCase conventions, test naming, helpers
+globs:
+  - "test/**/*.php"
+---
+
+@docs/ai/testing.md

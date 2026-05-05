@@ -1,0 +1,7 @@
+---
+description: Migration controller pattern — extends AbstractMigrationController and implements 4 required methods
+globs:
+  - "app/Controller/**/*.php"
+---
+
+@docs/ai/controllers.md

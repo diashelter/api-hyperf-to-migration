@@ -1,0 +1,5 @@
+---
+description: Pull-mode migration architecture, request lifecycle, job queue, ID mapping, and idempotency. Use when discussing system design, request flow, job execution, or adding a new Source.
+---
+
+@docs/ai/architecture.md

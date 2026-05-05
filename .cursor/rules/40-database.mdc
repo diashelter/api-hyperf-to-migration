@@ -1,0 +1,9 @@
+---
+description: Two-database rule, connection usage, migrations conventions
+globs:
+  - "app/**/*.php"
+  - "migrations/**/*.php"
+  - "config/autoload/databases.php"
+---
+
+@docs/ai/database.md
