@@ -14,8 +14,10 @@ namespace App\Service;
 
 use App\PullMode\Source\AbstractLegacySource;
 use App\Trait\RecordPreparation;
+use Hyperf\Coroutine\Parallel;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
+use Swoole\Coroutine\Channel;
 use Throwable;
 
 use function Hyperf\Support\now;
@@ -62,11 +64,16 @@ class EntityMigrator
         $progress = $this->jobService->getEntityProgress($jobId, $entity);
         $lastId = $progress['last_id'] ?? null;
 
+        $target = array_key_exists('target', $progress)
+            ? $progress['target']
+            : $source->count($legacyConnection);
+
         $totals = [
             'inserted' => (int) ($progress['inserted'] ?? 0),
             'failed' => (int) ($progress['failed'] ?? 0),
             'skipped' => (int) ($progress['skipped'] ?? 0),
             'last_id' => $lastId,
+            'target' => $target,
             'status' => 'processing',
             'started_at' => $progress['started_at'] ?? (string) now(),
         ];
@@ -75,9 +82,11 @@ class EntityMigrator
             'status' => 'processing',
             'started_at' => $totals['started_at'],
             'last_id' => $lastId,
+            'target' => $target,
         ]);
 
         $hasContractId = $source->hasContractId();
+        $useCopy = $source->useCopy();
         $resolveFn = function (array $record, string $cid) use ($fkMap, $hasContractId): array {
             if ($hasContractId) {
                 $record = $this->recordPrepResolveContractIdFK($this->idMappingService, $record, $cid);
@@ -86,99 +95,180 @@ class EntityMigrator
         };
 
         try {
-            while (true) {
-                $rows = $source->paginate($legacyConnection, $lastId, $chunkSize);
+            // Pipeline com overlap producer/consumer: enquanto o consumer faz
+            // dedup→prewarm→prepare→insertBatch→storeBatch, o producer já está
+            // lendo e transformando a próxima página do legado. Channel pequeno
+            // (capacidade 2) gera backpressure natural — o producer aguarda
+            // quando o consumer está mais lento.
+            $channel = new Channel(2);
+            $producerError = null;
+            $consumerError = null;
 
-                if (empty($rows)) {
-                    break;
-                }
+            $parallel = new Parallel(2);
 
-                $batch = array_map(
-                    static fn (array $row): array => $source->transformRow($row, $contractId),
-                    $rows
-                );
-
-                $transformedBatch = $batch;
-
-                [$batch, $skipped] = $this->recordPrepFilterDuplicates(
-                    $this->idMappingService,
-                    $entity,
-                    $batch,
-                    $contractId
-                );
-
-                [$batch, $skipped] = $this->restoreRecordsWithMissingTargets(
-                    $targetConnection,
-                    $targetTable,
-                    $transformedBatch,
-                    $batch,
-                    $skipped
-                );
-
-                [$batch, $reusedMappings] = $this->reuseExistingUsersByEmail(
-                    $entity,
-                    $targetConnection,
-                    $targetTable,
-                    $batch
-                );
-
-                if (! empty($reusedMappings)) {
-                    $this->idMappingService->storeBatch($entity, $reusedMappings, $contractId, $jobId);
-                    $totals['skipped'] += count($reusedMappings);
-                }
-
-                $this->recordPrepPrefetchForeignKeys(
-                    $this->idMappingService,
-                    $fkMap,
-                    $batch,
-                    $contractId
-                );
-
-                [$prepared, $idMappings] = $this->recordPrepPrepare(
-                    $batch,
-                    $contractId,
-                    $normalizeStrings,
-                    $idStrategy,
-                    $resolveFn
-                );
-
-                if (! empty($prepared)) {
-                    $result = $this->insertService->insertBatch(
-                        $targetTable,
-                        $prepared,
-                        0,
-                        0,
-                        $targetConnection
-                    );
-
-                    $totals['inserted'] += (int) $result['inserted'];
-                    $totals['failed'] += (int) $result['failed'];
-
-                    if (! empty($result['errors']) && ! isset($totals['error_message'])) {
-                        $totals['error_message'] = $result['errors'][0]['message'] ?? 'unknown insert error';
+            $parallel->add(function () use (
+                $source,
+                $legacyConnection,
+                $contractId,
+                $chunkSize,
+                $paginationKey,
+                $lastId,
+                $channel,
+                &$producerError
+            ) {
+                $cursor = $lastId;
+                try {
+                    while (true) {
+                        $rows = $source->paginate($legacyConnection, $cursor, $chunkSize);
+                        if (empty($rows)) {
+                            break;
+                        }
+                        $batch = array_map(
+                            static fn (array $row): array => $source->transformRow($row, $contractId),
+                            $rows
+                        );
+                        $lastRow = end($rows);
+                        $newCursor = isset($lastRow[$paginationKey]) ? (string) $lastRow[$paginationKey] : null;
+                        $rowCount = count($rows);
+                        $channel->push([
+                            'transformed_batch' => $batch,
+                            'last_id' => $newCursor,
+                        ]);
+                        $cursor = $newCursor;
+                        if ($rowCount < $chunkSize) {
+                            break;
+                        }
                     }
+                } catch (Throwable $e) {
+                    $producerError = $e;
+                } finally {
+                    $channel->push(null);
+                }
+            });
 
-                    if (! empty($idMappings) && $result['inserted'] > 0) {
-                        $this->idMappingService->storeBatch($entity, $idMappings, $contractId, $jobId);
+            $parallel->add(function () use (
+                $source,
+                $entity,
+                $targetTable,
+                $targetConnection,
+                $fkMap,
+                $normalizeStrings,
+                $idStrategy,
+                $resolveFn,
+                $contractId,
+                $jobId,
+                $channel,
+                $useCopy,
+                &$totals,
+                &$consumerError
+            ) {
+                try {
+                    while (true) {
+                        $msg = $channel->pop();
+                        if ($msg === null) {
+                            break;
+                        }
+
+                        $transformedBatch = $msg['transformed_batch'];
+                        $batch = $transformedBatch;
+                        $newLastId = $msg['last_id'];
+
+                        [$batch, $skipped] = $this->recordPrepFilterDuplicates(
+                            $this->idMappingService,
+                            $entity,
+                            $batch,
+                            $contractId
+                        );
+
+                        [$batch, $skipped] = $this->restoreRecordsWithMissingTargets(
+                            $targetConnection,
+                            $targetTable,
+                            $transformedBatch,
+                            $batch,
+                            $skipped
+                        );
+
+                        [$batch, $reusedMappings] = $this->reuseExistingUsersByEmail(
+                            $entity,
+                            $targetConnection,
+                            $targetTable,
+                            $batch
+                        );
+
+                        if (! empty($reusedMappings)) {
+                            $this->idMappingService->storeBatch($entity, $reusedMappings, $contractId, $jobId);
+                            $totals['skipped'] += count($reusedMappings);
+                        }
+
+                        $this->recordPrepPrefetchForeignKeys(
+                            $this->idMappingService,
+                            $fkMap,
+                            $batch,
+                            $contractId
+                        );
+
+                        [$prepared, $idMappings] = $this->recordPrepPrepare(
+                            $batch,
+                            $contractId,
+                            $normalizeStrings,
+                            $idStrategy,
+                            $resolveFn
+                        );
+
+                        if (! empty($prepared)) {
+                            $result = $useCopy
+                                ? $this->insertService->copyBatch(
+                                    $targetTable,
+                                    $prepared,
+                                    0,
+                                    $targetConnection
+                                )
+                                : $this->insertService->insertBatch(
+                                    $targetTable,
+                                    $prepared,
+                                    0,
+                                    0,
+                                    $targetConnection
+                                );
+
+                            $totals['inserted'] += (int) $result['inserted'];
+                            $totals['failed'] += (int) $result['failed'];
+
+                            if (! empty($result['errors']) && ! isset($totals['error_message'])) {
+                                $totals['error_message'] = $result['errors'][0]['message'] ?? 'unknown insert error';
+                            }
+
+                            if (! empty($idMappings) && $result['inserted'] > 0) {
+                                $this->idMappingService->storeBatch($entity, $idMappings, $contractId, $jobId);
+                            }
+                        }
+
+                        $totals['skipped'] += count($skipped);
+                        $totals['last_id'] = $newLastId;
+
+                        $this->jobService->updateEntityProgress($jobId, $entity, [
+                            'last_id' => $newLastId,
+                            'inserted' => $totals['inserted'],
+                            'failed' => $totals['failed'],
+                            'skipped' => $totals['skipped'],
+                        ]);
+                    }
+                } catch (Throwable $e) {
+                    $consumerError = $e;
+                    // drena o channel para liberar o producer caso ainda esteja produzindo
+                    while ($channel->pop(0.001) !== false) {
+                        // discard
                     }
                 }
+            });
 
-                $totals['skipped'] += count($skipped);
+            $parallel->wait();
 
-                $lastRow = end($rows);
-                $lastId = isset($lastRow[$paginationKey]) ? (string) $lastRow[$paginationKey] : null;
-                $totals['last_id'] = $lastId;
-
-                $this->jobService->updateEntityProgress($jobId, $entity, [
-                    'last_id' => $lastId,
-                    'inserted' => $totals['inserted'],
-                    'failed' => $totals['failed'],
-                    'skipped' => $totals['skipped'],
-                ]);
-
-                if (count($rows) < $chunkSize) {
-                    break;
-                }
+            if ($producerError !== null) {
+                throw $producerError;
+            }
+            if ($consumerError !== null) {
+                throw $consumerError;
             }
 
             $totals['status'] = $totals['failed'] > 0 ? 'completed_with_errors' : 'completed';
@@ -357,12 +447,18 @@ class EntityMigrator
         }
 
         $entity = $source->entity();
+        try {
+            $target = $source->count($legacyConnection);
+        } catch (Throwable) {
+            $target = null;
+        }
         $totals = [
             'status' => 'pending_special_handler',
             'special_handler' => $handler,
             'inserted' => 0,
             'failed' => 0,
             'skipped' => 0,
+            'target' => $target,
             'finished_at' => (string) now(),
             'message' => "Entity '{$entity}' requires special handler '{$handler}'; not implemented in pull-mode yet.",
         ];
@@ -379,7 +475,8 @@ class EntityMigrator
      *   1. Lê todos os vínculos do legado via ContractUserSource (singleton load).
      *   2. Resolve user_id e contract_id via IdMappingService.
      *   3. Resolve role_id pelo label ('owner'/'user') via LookupCacheService.
-     *   4. insertOrIgnore() — sem storeBatch (pivot sem id próprio).
+     *   4. Filtra existentes por (contract_id, user_id).
+     *   5. insertOrIgnore() — sem storeBatch (pivot sem id próprio).
      */
     private function handleContractUsersPivot(
         string $jobId,
@@ -391,12 +488,16 @@ class EntityMigrator
 
         $progress = $this->jobService->getEntityProgress($jobId, $entity);
         $lastId = $progress['last_id'] ?? null;
+        $target = array_key_exists('target', $progress)
+            ? $progress['target']
+            : $source->count($legacyConnection);
 
         $totals = [
             'inserted' => (int) ($progress['inserted'] ?? 0),
             'failed' => (int) ($progress['failed'] ?? 0),
             'skipped' => (int) ($progress['skipped'] ?? 0),
             'last_id' => $lastId,
+            'target' => $target,
             'status' => 'processing',
             'started_at' => $progress['started_at'] ?? (string) now(),
         ];
@@ -405,6 +506,7 @@ class EntityMigrator
             'status' => 'processing',
             'started_at' => $totals['started_at'],
             'last_id' => $lastId,
+            'target' => $target,
         ]);
 
         try {
@@ -451,12 +553,17 @@ class EntityMigrator
                 $skipped = 0;
 
                 if (! empty($records)) {
+                    [$records, $alreadyExisting] = $this->filterExistingContractUserRecords($records);
+                    $skipped += $alreadyExisting;
+                }
+
+                if (! empty($records)) {
                     $connection = Db::connection('conciliador_web');
                     $connection->beginTransaction();
                     try {
                         $inserted = $connection->table('contract_user')->insertOrIgnore($records);
                         $connection->commit();
-                        $skipped = count($records) - $inserted;
+                        $skipped += count($records) - $inserted;
                     } catch (Throwable $e) {
                         $connection->rollBack();
                         $failed += count($records);
@@ -493,6 +600,99 @@ class EntityMigrator
     }
 
     /**
+     * `insertOrIgnore()` só evita duplicidade quando o banco destino possui uma
+     * constraint única compatível. Como `contract_user` pode não ter essa
+     * constraint no ambiente de destino, filtramos pelo par de negócio antes.
+     *
+     * @param array<int, array<string, mixed>> $records
+     * @return array{0: array<int, array<string, mixed>>, 1: int}
+     */
+    private function filterExistingContractUserRecords(array $records): array
+    {
+        if (empty($records)) {
+            return [$records, 0];
+        }
+
+        $uniqueRecords = [];
+        $userIds = [];
+        $contractIds = [];
+        $skipped = 0;
+
+        foreach ($records as $record) {
+            $key = $this->contractUserRecordKey($record);
+
+            if ($key !== null && isset($uniqueRecords[$key])) {
+                $skipped++;
+                continue;
+            }
+
+            if ($key !== null) {
+                $uniqueRecords[$key] = $record;
+                $userIds[(string) $record['user_id']] = true;
+                $contractIds[(string) $record['contract_id']] = true;
+                continue;
+            }
+
+            $uniqueRecords[] = $record;
+        }
+
+        if (empty($userIds) || empty($contractIds)) {
+            return [array_values($uniqueRecords), $skipped];
+        }
+
+        $existing = [];
+        foreach (array_chunk(array_keys($userIds), 1000) as $userIdChunk) {
+            $rows = Db::connection('conciliador_web')
+                ->table('contract_user')
+                ->select(['user_id', 'contract_id'])
+                ->whereIn('user_id', $userIdChunk)
+                ->whereIn('contract_id', array_keys($contractIds))
+                ->get();
+
+            foreach ($rows as $row) {
+                $row = (array) $row;
+                $key = $this->contractUserRecordKey($row);
+
+                if ($key !== null) {
+                    $existing[$key] = true;
+                }
+            }
+        }
+
+        $toInsert = [];
+        foreach ($uniqueRecords as $record) {
+            $key = $this->contractUserRecordKey($record);
+
+            if ($key !== null && isset($existing[$key])) {
+                $skipped++;
+                continue;
+            }
+
+            $toInsert[] = $record;
+        }
+
+        return [$toInsert, $skipped];
+    }
+
+    /**
+     * Chave natural do pivot. `role_id` e `contract_admin` são atributos do
+     * vínculo; não devem permitir um segundo vínculo para o mesmo usuário.
+     *
+     * @param array<string, mixed> $record
+     */
+    private function contractUserRecordKey(array $record): ?string
+    {
+        $userId = isset($record['user_id']) ? (string) $record['user_id'] : '';
+        $contractId = isset($record['contract_id']) ? (string) $record['contract_id'] : '';
+
+        if ($userId === '' || $contractId === '') {
+            return null;
+        }
+
+        return $contractId . ':' . $userId;
+    }
+
+    /**
      * Apaga de `permission_users` todos os registros cujos user_ids vêm da
      * tabela `usuario_permissao` do legado, filtrados pelo contract_id resolvido.
      * Idempotente: DELETE WHERE não falha se os registros já foram removidos.
@@ -506,12 +706,21 @@ class EntityMigrator
         $entity = $source->entity();
 
         $progress = $this->jobService->getEntityProgress($jobId, $entity);
+        $target = $progress['target'] ?? null;
+        if (! array_key_exists('target', $progress)) {
+            try {
+                $target = $source->count($legacyConnection);
+            } catch (Throwable) {
+                $target = null;
+            }
+        }
 
         $totals = [
             'inserted' => 0,
             'failed' => 0,
             'skipped' => (int) ($progress['skipped'] ?? 0),
             'last_id' => null,
+            'target' => $target,
             'status' => 'processing',
             'started_at' => $progress['started_at'] ?? (string) now(),
         ];
@@ -519,6 +728,7 @@ class EntityMigrator
         $this->jobService->updateEntityProgress($jobId, $entity, [
             'status' => 'processing',
             'started_at' => $totals['started_at'],
+            'target' => $target,
         ]);
 
         try {

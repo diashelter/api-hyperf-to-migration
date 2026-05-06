@@ -63,6 +63,11 @@ class PeopleVinculatedSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM pessoas_vinculo';
+    }
+
     public function validationRules(): array
     {
         return [

@@ -74,6 +74,11 @@ class CompanySource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM empresas WHERE pk <> 0';
+    }
+
     public function validationRules(): array
     {
         return [

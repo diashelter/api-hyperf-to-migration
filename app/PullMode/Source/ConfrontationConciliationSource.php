@@ -48,6 +48,18 @@ class ConfrontationConciliationSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM confrontos_itens
+            JOIN confrontos_itens bank ON confrontos_itens.fk_confrontos_item = bank.pk
+            WHERE confrontos_itens.fk_layoutimp <> 0
+              AND confrontos_itens.created_at > NOW() - INTERVAL '60 days'
+              AND confrontos_itens.tipo = 'F'
+        SQL;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

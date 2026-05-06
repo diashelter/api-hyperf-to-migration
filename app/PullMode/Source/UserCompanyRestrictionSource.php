@@ -42,6 +42,11 @@ class UserCompanyRestrictionSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM usuario_empresas';
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

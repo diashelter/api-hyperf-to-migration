@@ -158,6 +158,17 @@ class LayoutSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(DISTINCT layout.pk) AS count
+            FROM public.layout
+            JOIN layout_empresa ON layout.pk = layout_empresa.fk_layoutimp
+            WHERE visivel = 1
+              AND tipo = 'IMP'
+        SQL;
+    }
+
     public function validationRules(): array
     {
         return [

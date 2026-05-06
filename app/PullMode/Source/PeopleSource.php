@@ -53,6 +53,11 @@ class PeopleSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM pessoas';
+    }
+
     public function validationRules(): array
     {
         return [

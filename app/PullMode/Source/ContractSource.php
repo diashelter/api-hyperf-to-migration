@@ -85,6 +85,11 @@ class ContractSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM contrato WHERE pk <> 0';
+    }
+
     /**
      * Singleton por banco: executa o SELECT completo na primeira chamada.
      * Se lastId já estiver preenchido (retomada), retorna [] — o registro já

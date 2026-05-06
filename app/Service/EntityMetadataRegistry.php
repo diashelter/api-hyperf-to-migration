@@ -68,7 +68,7 @@ class EntityMetadataRegistry
             CompanySource::class,
 
             CompanyLayoutSource::class,
-            // CompanyLayoutFixedAccountSource::class,
+            CompanyLayoutFixedAccountSource::class,
             UserCompanyRestrictionSource::class,
 
             PeopleSource::class,
@@ -76,15 +76,28 @@ class EntityMetadataRegistry
 
             ImportSource::class,
             ImportSessionSource::class,
+            RuleSource::class,
             ImportRecordSource::class,
 
-            RuleSource::class,
+            IgnoredConciliationTermSource::class,
 
-            // IgnoredConciliationTermSource::class,
-
-            // ConfrontationSource::class,
-            // ConfrontationRecordSource::class,
-            // ConfrontationConciliationSource::class,
+            ConfrontationSource::class,
+            ConfrontationRecordSource::class,
+            ConfrontationConciliationSource::class,
         ];
+    }
+
+    /**
+     * Nomes canônicos de entidade na mesma ordem de sources(), usados para
+     * reordenar entity_progress na resposta da API.
+     *
+     * @return array<int, string>
+     */
+    public static function entityNames(): array
+    {
+        return array_map(
+            static fn(string $class): string => (new $class())->entity(),
+            static::sources()
+        );
     }
 }

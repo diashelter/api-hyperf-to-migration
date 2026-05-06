@@ -97,11 +97,16 @@ trait RecordPreparation
             }
         }
 
+        $deduped = [];
         foreach ($legacyIdsByEntity as $entity => $legacyIds) {
             if (empty($legacyIds)) {
                 continue;
             }
-            $idMappingService->prewarm($entity, array_values(array_unique($legacyIds)), $contractId);
+            $deduped[$entity] = array_values(array_unique($legacyIds));
+        }
+
+        if (! empty($deduped)) {
+            $idMappingService->prewarmMulti($deduped, $contractId);
         }
     }
 

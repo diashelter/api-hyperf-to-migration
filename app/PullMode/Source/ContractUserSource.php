@@ -51,6 +51,11 @@ class ContractUserSource extends AbstractLegacySource
         return false;
     }
 
+    public function countSql(): ?string
+    {
+        return "SELECT COUNT(*) AS count FROM usuarios WHERE email <> 'suporte@integradorcontabil.net.br'";
+    }
+
     public function specialHandler(): ?string
     {
         return 'contract_users_pivot';
@@ -58,7 +63,7 @@ class ContractUserSource extends AbstractLegacySource
 
     /**
      * Pivot idempotente: em retries ou novos jobs, carregar todos os vinculos e
-     * deixar o insertOrIgnore() evitar duplicidade.
+     * deixar o handler especial filtrar vinculos ja existentes antes do insert.
      *
      * @return array<int, array<string, mixed>>
      */

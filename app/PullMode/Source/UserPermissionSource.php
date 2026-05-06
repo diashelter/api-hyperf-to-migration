@@ -43,6 +43,11 @@ class UserPermissionSource extends AbstractLegacySource
         return false;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM usuario_permissao';
+    }
+
     public function specialHandler(): ?string
     {
         return 'user_permissions_delete';

@@ -57,6 +57,18 @@ class ConfrontationSource extends AbstractLegacySource
             JOIN empresas ON empresas.pk = confrontos.fk_empresa
             LEFT JOIN usuarios ON usuarios.nome = criado_por
             WHERE created_at > NOW() - INTERVAL '60 days'
+              AND confrontos.pk > COALESCE(NULLIF(:last_id, '')::BIGINT, 0)
+            ORDER BY confrontos.pk ASC
+            LIMIT :limit
+        SQL;
+    }
+
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM confrontos
+            WHERE created_at > NOW() - INTERVAL '60 days'
         SQL;
     }
 

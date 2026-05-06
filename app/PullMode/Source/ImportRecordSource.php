@@ -52,12 +52,27 @@ class ImportRecordSource extends AbstractLegacySource
         return false;
     }
 
+    public function useCopy(): bool
+    {
+        return $this->copyEnabled(true);
+    }
+
     public function fkMap(): array
     {
         return [
             'legacy_import_id' => 'imports',
             'legacy_import_session_id' => 'import_sessions',
         ];
+    }
+
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM importacao
+            JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
+            WHERE importacao.fk_layout <> 0
+        SQL;
     }
 
     public function sql(): string

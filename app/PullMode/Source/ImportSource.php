@@ -39,6 +39,20 @@ class ImportSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count FROM (
+                SELECT 1
+                FROM importacao
+                JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
+                WHERE fk_layout <> 0
+                GROUP BY importacao.fk_empresa, fk_layoutempresa
+                HAVING MAX(importacao.inclusao) > NOW() - INTERVAL '60 days'
+            ) AS sub
+        SQL;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

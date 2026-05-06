@@ -34,6 +34,11 @@ class RuleSource extends AbstractLegacySource
         return 5000;
     }
 
+    public function useCopy(): bool
+    {
+        return $this->copyEnabled(true);
+    }
+
     public function fkMap(): array
     {
         return [
@@ -42,10 +47,19 @@ class RuleSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM regras
+            JOIN layout_empresa ON regras.fk_layout_empresa = layout_empresa.pk
+            WHERE fk_layoutimp <> 0
+        SQL;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'
-            WITH base AS (
             SELECT
                 regras.id                                               AS legacy_id,
                 layout_empresa.fk_empresa                              AS legacy_company_id,
@@ -68,10 +82,6 @@ class RuleSource extends AbstractLegacySource
                 idccdebito                                             AS id_cc_debit,
                 reprocessar                                            AS reprocess,
                 invalida                                               AS invalid,
-                ROW_NUMBER() OVER (
-                    PARTITION BY fk_layoutimp
-                    ORDER BY fk_layoutimp
-                )                                                      AS sort_order,
                 historico_imp                                          AS history_value,
                 cpfcnpj_imp                                            AS cpf_cnpj_value,
                 clifor_imp                                             AS client_supplier_value,
@@ -83,14 +93,11 @@ class RuleSource extends AbstractLegacySource
             FROM regras
             JOIN layout_empresa ON regras.fk_layout_empresa = layout_empresa.pk
             WHERE fk_layoutimp <> 0
-            )
-            SELECT *
-            FROM base
-            WHERE legacy_id > COALESCE(
+              AND regras.id > COALESCE(
                 CAST(NULLIF(:last_id, '') AS UUID),
                 '00000000-0000-0000-0000-000000000000'::UUID
-            )
-            ORDER BY legacy_id ASC
+              )
+            ORDER BY regras.id ASC
             LIMIT :limit
         SQL;
     }
@@ -105,7 +112,6 @@ class RuleSource extends AbstractLegacySource
             'exclusive' => 'nullable|boolean',
             'reprocess' => 'nullable|boolean',
             'invalid' => 'nullable|boolean',
-            'sort_order' => 'nullable|integer',
             'automatic_launch' => 'nullable|boolean',
         ];
     }

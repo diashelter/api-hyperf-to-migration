@@ -94,6 +94,11 @@ class CompanyLayoutFixedAccountSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM layout_empresa WHERE conta_fixa_hab = true';
+    }
+
     public function transformRow(array $row, string $contractId): array
     {
         $model = $this->decodeFixedAccountsModel($row['contas_fixas_modelo'] ?? null);

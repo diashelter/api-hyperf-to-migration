@@ -31,6 +31,11 @@ class IgnoredConciliationTermSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM layout_despresados WHERE fk_layout <> 0';
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

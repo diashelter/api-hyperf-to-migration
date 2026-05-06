@@ -105,17 +105,36 @@ class MigrationJobService
             return;
         }
 
-        $hasErrors = ! empty($errorSummary) || ($job->totals['failed'] ?? 0) > 0;
+        $totals = $this->summarizeEntityProgress($job->entity_progress ?? []);
+        $hasErrors = ! empty($errorSummary) || ($totals['failed'] ?? 0) > 0;
 
         $job->status = $hasErrors ? 'completed_with_errors' : 'completed';
         $job->finished_at = now();
         $job->current_entity = null;
+        $job->totals = $totals;
 
         if ($errorSummary !== null) {
             $job->error_summary = $errorSummary;
         }
 
         $job->save();
+    }
+
+    private function summarizeEntityProgress(array $entityProgress): array
+    {
+        $totals = ['inserted' => 0, 'failed' => 0, 'skipped' => 0];
+
+        foreach ($entityProgress as $progress) {
+            if (! is_array($progress)) {
+                continue;
+            }
+
+            $totals['inserted'] += (int) ($progress['inserted'] ?? 0);
+            $totals['failed'] += (int) ($progress['failed'] ?? 0);
+            $totals['skipped'] += (int) ($progress['skipped'] ?? 0);
+        }
+
+        return $totals;
     }
 
     public function markFailed(string $jobId, string $error): void
@@ -145,7 +164,7 @@ class MigrationJobService
             'status' => $job->status,
             'current_entity' => $job->current_entity,
             'totals' => $job->totals ?? [],
-            'entity_progress' => $job->entity_progress ?? [],
+            'entity_progress' => $this->sortEntityProgress($job->entity_progress ?? []),
             'error_summary' => $job->error_summary,
             'started_at' => $job->started_at,
             'finished_at' => $job->finished_at,
@@ -159,9 +178,10 @@ class MigrationJobService
             ->orderByDesc('created_at')
             ->limit($limit)
             ->get()
-            ->map(static function (MigrationJob $job): array {
+            ->map(function (MigrationJob $job): array {
                 $row = $job->toArray();
                 $row['migration_scope'] = $row['contract_id'] ?? null;
+                $row['entity_progress'] = $this->sortEntityProgress($row['entity_progress'] ?? []);
                 return $row;
             })
             ->toArray();
@@ -174,12 +194,44 @@ class MigrationJobService
             ->orderByDesc('created_at')
             ->limit($limit)
             ->get()
-            ->map(static function (MigrationJob $job): array {
+            ->map(function (MigrationJob $job): array {
                 $row = $job->toArray();
                 $row['migration_scope'] = $row['contract_id'] ?? null;
+                $row['entity_progress'] = $this->sortEntityProgress($row['entity_progress'] ?? []);
                 return $row;
             })
             ->toArray();
+    }
+
+    /**
+     * Reordena entity_progress seguindo a ordem canônica de EntityMetadataRegistry::sources().
+     * Entidades não reconhecidas (legado de jobs antigos) ficam ao final.
+     *
+     * @param array<string, mixed> $progress
+     * @return array<string, mixed>
+     */
+    private function sortEntityProgress(array $progress): array
+    {
+        if (empty($progress)) {
+            return $progress;
+        }
+
+        $order = array_flip(EntityMetadataRegistry::entityNames());
+        $sorted = [];
+
+        foreach (EntityMetadataRegistry::entityNames() as $entity) {
+            if (isset($progress[$entity])) {
+                $sorted[$entity] = $progress[$entity];
+            }
+        }
+
+        foreach ($progress as $entity => $data) {
+            if (! isset($order[$entity])) {
+                $sorted[$entity] = $data;
+            }
+        }
+
+        return $sorted;
     }
 
     public function listByContract(string $contractId, int $limit = 50): array

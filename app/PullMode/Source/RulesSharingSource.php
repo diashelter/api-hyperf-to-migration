@@ -36,6 +36,11 @@ class RulesSharingSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM plano_contas WHERE pk <> 0';
+    }
+
     public function sql(): string
     {
         return <<<'SQL'
@@ -46,6 +51,9 @@ class RulesSharingSource extends AbstractLegacySource
                 CURRENT_DATABASE()  AS legacy_contract_id
             FROM plano_contas
             WHERE pk <> 0
+              AND pk > COALESCE(NULLIF(:last_id, '')::BIGINT, 0)
+            ORDER BY pk ASC
+            LIMIT :limit
         SQL;
     }
 

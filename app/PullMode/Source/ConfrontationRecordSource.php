@@ -46,11 +46,26 @@ class ConfrontationRecordSource extends AbstractLegacySource
         return false;
     }
 
+    public function useCopy(): bool
+    {
+        return $this->copyEnabled(true);
+    }
+
     public function fkMap(): array
     {
         return [
             'legacy_confrontation_id' => 'confrontations',
         ];
+    }
+
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM confrontos_itens
+            WHERE fk_layoutimp <> 0
+              AND created_at > NOW() - INTERVAL '60 days'
+        SQL;
     }
 
     public function sql(): string
@@ -81,7 +96,9 @@ class ConfrontationRecordSource extends AbstractLegacySource
             FROM confrontos_itens
             WHERE fk_layoutimp <> 0
               AND created_at > NOW() - INTERVAL '60 days'
-            ORDER BY created_at, "order"
+              AND pk > COALESCE(NULLIF(:last_id, '')::BIGINT, 0)
+            ORDER BY pk ASC
+            LIMIT :limit
         SQL;
     }
 

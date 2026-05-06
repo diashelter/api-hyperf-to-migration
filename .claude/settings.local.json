@@ -64,7 +64,9 @@
       "Bash(/usr/bin/grep -h \"token\" /Users/helterdias/Documents/conciliador-migrator/test/e2e/smoke-test.sh)",
       "Bash(/usr/bin/grep -rh \"/token\" /Users/helterdias/Documents/conciliador-migrator/test/e2e/)",
       "Bash(sed 's/\\\\.php$//')",
-      "Bash(sed 's/MigrationController$//')"
+      "Bash(sed 's/MigrationController$//')",
+      "Bash(vendor/bin/phpunit)",
+      "Read(//tmp/**)"
     ]
   }
 }
