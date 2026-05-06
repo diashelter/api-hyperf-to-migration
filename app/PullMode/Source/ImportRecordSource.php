@@ -72,6 +72,7 @@ class ImportRecordSource extends AbstractLegacySource
             FROM importacao
             JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
             WHERE importacao.fk_layout <> 0
+            AND importacao.inclusao > NOW() - INTERVAL '60 days'
         SQL;
     }
 
