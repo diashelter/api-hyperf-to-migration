@@ -46,7 +46,7 @@ class CompanySource extends AbstractLegacySource
                 pk                                                  AS code,
                 codigoexterno                                       AS external_code,
                 razaosocial                                         AS corporate_name,
-                REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g')            AS cpf_cnpj,
+                REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g')             AS cpf_cnpj,
                 telefone                                            AS phone,
                 endereco                                            AS street,
                 numero                                              AS "number",

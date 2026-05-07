@@ -62,6 +62,7 @@ class ImportRecordSource extends AbstractLegacySource
         return [
             'legacy_import_id' => 'imports',
             'legacy_import_session_id' => 'import_sessions',
+            'legacy_id_rule' => 'rules',
         ];
     }
 
@@ -84,13 +85,16 @@ class ImportRecordSource extends AbstractLegacySource
                 importacao.uuid                                    AS id,
                 'IMP-' || importacao.fk_layoutempresa              AS legacy_import_id,
                 'IS-' || importacao.fk_layoutempresa               AS legacy_import_session_id,
-                importacao.data                                    AS date,
-                COALESCE(importacao.historico_novo, importacao.historico) AS history,
+                importacao.fk_regra                                AS legacy_id_rule,
+                COALESCE("data", '1976-01-01')                   AS date,
+                importacao.historico                               AS history,
                 CASE
                     WHEN ABS(importacao.valor) < 10000000000000 THEN importacao.valor
-                    ELSE NULL
+                    ELSE 9999999999999
                 END                                                AS value,
-                importacao.cd                                      AS debit_credit,
+                CASE cd
+                    WHEN 'C' THEN 'C'
+                    ELSE 'D' END                                   AS debit_credit,
                 importacao.numdocumento                            AS num_doc,
                 importacao.fornecedor                              AS client_supplier,
                 importacao.banco                                   AS bank,
@@ -100,7 +104,7 @@ class ImportRecordSource extends AbstractLegacySource
                 importacao.con_idcredito                           AS credit_account,
                 importacao.complemento                             AS complement,
                 importacao.datavencimento                          AS due_date,
-                importacao.parcela                                 AS parcel,
+                LEFT(importacao.parcela, 25)                       AS parcel,
                 importacao.con_idhistorico                         AS history_code,
                 importacao.historicoexp                            AS accounting_history,
                 importacao.infadicional                            AS additional_information,
@@ -128,7 +132,11 @@ class ImportRecordSource extends AbstractLegacySource
                     WHEN 'NC' THEN 'N'
                     WHEN 'AF' THEN 'F'
                     ELSE NULL
-                END                                     AS conciliation_status
+                END                                     AS conciliation_status,
+                ROW_NUMBER() OVER (
+                    PARTITION BY fk_layoutempresa
+                    ORDER BY uuid
+                ) AS order_number
             FROM importacao
             JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
             WHERE importacao.fk_layout <> 0
@@ -137,7 +145,7 @@ class ImportRecordSource extends AbstractLegacySource
                   CAST(NULLIF(:last_id, '') AS UUID),
                   '00000000-0000-0000-0000-000000000000'::UUID
               )
-            ORDER BY importacao.uuid ASC
+            ORDER BY fk_layoutempresa, importacao.uuid ASC
             LIMIT :limit
         SQL;
     }

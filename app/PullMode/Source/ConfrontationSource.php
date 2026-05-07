@@ -57,7 +57,10 @@ class ConfrontationSource extends AbstractLegacySource
             JOIN empresas ON empresas.pk = confrontos.fk_empresa
             LEFT JOIN usuarios ON usuarios.nome = criado_por
             WHERE created_at > NOW() - INTERVAL '60 days'
-              AND confrontos.pk > COALESCE(NULLIF(:last_id, '')::BIGINT, 0)
+                AND confrontos.pk > COALESCE(
+                  CAST(NULLIF(:last_id, '') AS UUID),
+                  '00000000-0000-0000-0000-000000000000'::UUID
+                )
             ORDER BY confrontos.pk ASC
             LIMIT :limit
         SQL;

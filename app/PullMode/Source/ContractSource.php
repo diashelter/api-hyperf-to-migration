@@ -58,7 +58,7 @@ class ContractSource extends AbstractLegacySource
         return <<<'SQL'
             SELECT
                 CURRENT_DATABASE()  AS legacy_id,
-                cnpj                AS cpf_cnpj,
+                REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
                 razaosocial         AS corporate_name,
                 endereco            AS street,
                 numero              AS number,
@@ -69,7 +69,7 @@ class ContractSource extends AbstractLegacySource
                 COALESCE(NULLIF(fantasia, ''), razaosocial) AS name,
                 email               AS email,
                 'company'           AS contractor_type,
-                1000                AS company_count,
+                0                   AS company_count,
                 CASE ativo
                     WHEN 'F' THEN 'SUSPENSO'
                     ELSE 'ATIVO'

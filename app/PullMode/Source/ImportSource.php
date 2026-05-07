@@ -70,7 +70,8 @@ class ImportSource extends AbstractLegacySource
                 fk_layoutempresa                                AS legacy_company_layout_id,
                 layout_empresa.saldo_anterior                   AS previous_balance,
                 COUNT(fk_layoutempresa) > 10000                 AS is_big_import,
-                1                                               AS total_files
+                1                                               AS total_files,
+                MAX(importacao.inclusao)                        AS created_at
             FROM importacao
             JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
             WHERE fk_layout <> 0

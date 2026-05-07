@@ -47,6 +47,11 @@ class ConfrontationConciliationSource extends AbstractLegacySource
             'legacy_confrontation_records_financial' => 'confrontation_records',
         ];
     }
+    
+    public function hasContractId(): bool
+    {
+        return false;
+    }
 
     public function countSql(): ?string
     {

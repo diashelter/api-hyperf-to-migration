@@ -55,7 +55,13 @@ class ConfrontationRecordSource extends AbstractLegacySource
     {
         return [
             'legacy_confrontation_id' => 'confrontations',
+            'legacy_import_record_id' => 'import_records',
         ];
+    }
+
+    public function hasContractId(): bool
+    {
+        return false;
     }
 
     public function countSql(): ?string
@@ -72,31 +78,35 @@ class ConfrontationRecordSource extends AbstractLegacySource
     {
         return <<<'SQL'
             SELECT
-                pk                                          AS legacy_id,
-                fk_confrontos                               AS legacy_confrontation_id,
-                (ABS(valor) = valor_vinculado)              AS conciliated,
-                "order"                                     AS order_number,
-                "data"                                      AS "date",
-                fk_layoutimp                                AS layout_code,
-                numdocumento                                AS num_doc,
-                cd                                          AS debit_credit,
-                valor                                       AS "value",
-                historico                                   AS history,
-                fornecedor                                  AS client_supplier,
-                banco                                       AS bank,
+                pk                                              AS legacy_id,
+                fk_confrontos                                   AS legacy_confrontation_id,
+                (ABS(valor) = valor_vinculado)                  AS conciliated,
+                "order"                                         AS order_number,
+                "data"                                          AS "date",
+                fk_layoutimp                                    AS layout_code,
+                numdocumento                                    AS num_doc,
+                cd                                              AS debit_credit,
+                valor                                           AS "value",
+                historico                                       AS history,
+                fornecedor                                      AS client_supplier,
+                banco                                           AS bank,
                 filial,
-                parcela                                     AS parcel,
-                cpfcnpj_forn                                AS cpf_cnpj,
-                infadicional                                AS additional_information,
-                infadicional3                               AS additional_information_3,
-                complemento                                 AS complement,
-                tipo                                        AS records_origin,
+                parcela                                         AS parcel,
+                REGEXP_REPLACE(cpfcnpj_forn, '[^0-9]', '', 'g') AS cpf_cnpj,
+                infadicional                                    AS additional_information,
+                infadicional3                                   AS additional_information_3,
+                complemento                                     AS complement,
+                tipo                                            AS records_origin,
                 created_at,
-                valor_vinculado                             AS conciliated_value
+                valor_vinculado                                 AS conciliated_value,
+                uuid                                            AS legacy_import_record_id
             FROM confrontos_itens
             WHERE fk_layoutimp <> 0
               AND created_at > NOW() - INTERVAL '60 days'
-              AND pk > COALESCE(NULLIF(:last_id, '')::BIGINT, 0)
+              AND pk > COALESCE(
+                  CAST(NULLIF(:last_id, '') AS UUID),
+                  '00000000-0000-0000-0000-000000000000'::UUID
+                )
             ORDER BY pk ASC
             LIMIT :limit
         SQL;

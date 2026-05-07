@@ -12,6 +12,10 @@ declare(strict_types=1);
 
 namespace App\PullMode\Source;
 
+use App\Service\IdMappingService;
+use Hyperf\Di\Annotation\Inject;
+
+
 /**
  * Source legada → `rules`. FKs: companies, layouts, contracts.
  *
@@ -19,6 +23,9 @@ namespace App\PullMode\Source;
  */
 class RuleSource extends AbstractLegacySource
 {
+    #[Inject()]
+    protected IdMappingService $idMappingService;
+
     public function entity(): string
     {
         return 'rules';
@@ -61,11 +68,11 @@ class RuleSource extends AbstractLegacySource
     {
         return <<<'SQL'
             SELECT
-                regras.id                                               AS legacy_id,
+                regras.id                                              AS legacy_id,
                 layout_empresa.fk_empresa                              AS legacy_company_id,
                 layout_empresa.fk_layoutimp                            AS legacy_layout_id,
-                CASE cd WHEN 'C' THEN 'C' ELSE 'D' END                AS debit_credit,
-                cpfcnpj                                                AS cpf_cnpj,
+                CASE cd WHEN 'C' THEN 'C' ELSE 'D' END                 AS debit_credit,
+                REGEXP_REPLACE(cpfcnpj , '[^0-9]', '', 'g')            AS cpf_cnpj,
                 clifor                                                 AS client_supplier,
                 historico                                              AS history,
                 banco                                                  AS bank,
@@ -102,6 +109,29 @@ class RuleSource extends AbstractLegacySource
         SQL;
     }
 
+    public function transformRow(array $row, string $_contractId): array
+    {
+
+        $resolvedLayoutId = ! empty($row['legacy_layout_id'])
+            ? $this->idMappingService->resolve('layouts', (string) $row['legacy_layout_id'], $_contractId)
+            : null;
+
+        unset($row['legacy_layout_id']);
+
+        $row['layout_id'] = $resolvedLayoutId;
+        $row['token'] = $this->parseTokenToWeb($row['token'], $resolvedLayoutId ?? null);
+        $row['cpf_cnpj'] = $this->replaceValuesWithNullIf($row, 'cpf_cnpj', 'field_cpfcnpj');
+        $row['client_supplier'] = $this->replaceValuesWithNullIf($row, 'client_supplier', 'field_clifor');
+        $row['history'] = $this->replaceValuesWithNullIf($row, 'history', 'fnc_semelhante');
+        $row['history'] = $this->replaceValuesWithNullIf($row, 'history', 'field_historico');
+        $row['bank'] = $this->replaceValuesWithNullIf($row, 'bank', 'field_banco');
+        $row['filial'] = $this->replaceValuesWithNullIf($row, 'filial', 'field_filial');
+        $row['additional_information'] = $this->replaceValuesWithNullIf($row, 'additional_information', 'field_infadicional');
+        $row['additional_information_3'] = $this->replaceValuesWithNullIf($row, 'additional_information_3', 'field_infadicional_compl');
+
+        return $row;
+    }
+
     public function validationRules(): array
     {
         return [
@@ -114,5 +144,49 @@ class RuleSource extends AbstractLegacySource
             'invalid' => 'nullable|boolean',
             'automatic_launch' => 'nullable|boolean',
         ];
+    }
+
+    public function normalizeStrings(): bool
+    {
+        return false;
+    }
+
+    private function parseTokenToWeb(string $legacyToken, $layout_id): string
+    {
+        // Conversão de token legado para formato do sistema web
+        // token de (11,1,0,1,1,0,0,0,0) para (a144e3c6-72e8-43a4-b5da-840ca3b55393,t,f,f,t,t,f,f,f,f,f)
+
+        if (empty($legacyToken)) {
+            return '';
+        }
+        // remover parentesses
+        $removed = str_replace(['(', ')'], '', $legacyToken);
+        // separar por vírgula
+        $parts = explode(',', $removed);
+        // mapear para o formato web
+        return sprintf(
+            '(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+            $layout_id,
+            $parts[1] === '0' ? 'f' : 't',
+            $parts[2] === '0' ? 'f' : 't',
+            $parts[3] === '0' ? 'f' : 't',
+            $parts[4] === '0' ? 'f' : 't',
+            $parts[5] === '0' ? 'f' : 't',
+            $parts[6] === '0' ? 'f' : 't',
+            $parts[7] === '0' ? 'f' : 't',
+            'f',
+            $parts[8] === '0' ? 'f' : 't',
+            'f'
+        );
+    }
+
+    private function replaceValuesWithNullIf(array $record, string $field, string $placeholder): ?string
+    {
+        if (isset($record[$field]) && $record[$field] !== '') {
+            return str_replace([$placeholder], "field_{$field}", $record[$field]);
+        } else {
+            return "NULLIF(#field_{$field}#,'') IS NULL";
+        }
+        return null;
     }
 }

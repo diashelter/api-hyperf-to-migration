@@ -51,15 +51,36 @@ class PeopleVinculatedSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
-            SELECT
-                id                      AS legacy_id,
-                fk_pessoa               AS legacy_people_id,
-                fk_empresa              AS legacy_company_id,
-                fk_compartilhamento     AS legacy_rules_sharing_id,
-                conta_deb               AS debit_account,
-                conta_cred              AS credit_account,
-                participante            AS participant
+            WITH pessoas_ref AS (
+            SELECT DISTINCT ON ( REGEXP_REPLACE(cpfcnpj, '[^0-9]', '', 'g')  )
+                        pessoas.id AS legacy_id,
+                        REGEXP_REPLACE(pessoas.cpfcnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
+                            pessoas.nomerazao AS corporate_name,
+                        CURRENT_DATABASE() AS legacy_contract_id
+                    FROM pessoas
+                    WHERE cpfcnpj IS NOT null
+            UNION ALL
+            SELECT 
+                        pessoas.id AS legacy_id,
+                        pessoas.cpfcnpj AS cpf_cnpj,
+                            pessoas.nomerazao AS corporate_name,
+                        CURRENT_DATABASE() AS legacy_contract_id
+                    FROM pessoas
+                    WHERE cpfcnpj IS NULL
+                    
+            ORDER BY 3
+            )
+            SELECT 
+                pessoas_vinculo.id AS legacy_id,
+                pessoas_ref.legacy_id AS legacy_people_id,
+                fk_empresa AS legacy_company_id,
+                fk_compartilhamento AS legacy_rules_sharing_id,
+                conta_deb AS debit_account,
+                conta_cred AS credit_account,
+                participante AS participant
             FROM pessoas_vinculo
+                JOIN pessoas_ref ON pessoas_ref.legacy_id = pessoas_vinculo.fk_pessoa
+            ORDER BY 1
         SQL;
     }
 
