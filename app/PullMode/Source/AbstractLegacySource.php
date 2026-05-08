@@ -96,13 +96,11 @@ abstract class AbstractLegacySource
     }
 
     /**
-     * Estratégia de geração de id no destino. "uuid7" é recomendado para
-     * tabelas de alto volume com índice ordenado (import_records,
-     * confrontation_records).
+     * Estratégia de geração de id no destino.
      */
     public function idStrategy(): string
     {
-        return 'uuid4';
+        return 'uuid7';
     }
 
     /**

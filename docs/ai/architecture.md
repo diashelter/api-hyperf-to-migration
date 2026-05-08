@@ -511,8 +511,7 @@ O pipeline usa `RecordPreparation::recordPrepGenerateId()`:
 
 | Estratégia | Uso |
 |---|---|
-| `uuid4` | Padrão para a maioria das entidades |
-| `uuid7` | Disponível para Sources de alto volume, como `ImportRecordSource` e `ConfrontationRecordSource`, atualmente desligadas |
+| `uuid7` | Padrão para todos os UUIDs gerados pela aplicação |
 
 Se o registro já vier com `id`, o pipeline preserva esse valor.
 

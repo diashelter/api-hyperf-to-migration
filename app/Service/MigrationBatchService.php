@@ -22,7 +22,7 @@ class MigrationBatchService
     public function create(string $entity, int $totalRecords, string $contractId): MigrationBatch
     {
         return MigrationBatch::query()->create([
-            'id' => Uuid::uuid4()->toString(),
+            'id' => Uuid::uuid7()->toString(),
             'contract_id' => $contractId,
             'entity' => $entity,
             'status' => 'queued',

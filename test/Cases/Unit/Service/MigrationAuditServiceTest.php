@@ -38,6 +38,7 @@ final class MigrationAuditServiceTest extends UnitTestCase
             ->once()
             ->with(Mockery::on(function (array $payload): bool {
                 return $payload['request_id'] === 'request-1'
+                    && preg_match(self::UUID_V7_PATTERN, $payload['id'] ?? '') === 1
                     && $payload['contract_id'] === 'contract-1'
                     && $payload['entity'] === 'contracts'
                     && $payload['status'] === 'received'
@@ -100,7 +101,7 @@ final class MigrationAuditServiceTest extends UnitTestCase
                         && $records[0]['request_id'] === 'request-1'
                         && $records[0]['contract_id'] === 'contract-1'
                         && $records[0]['entity'] === 'contracts'
-                        && is_string($records[0]['id'] ?? null)
+                        && preg_match(self::UUID_V7_PATTERN, $records[0]['id'] ?? '') === 1
                         && is_string($records[0]['created_at'] ?? null);
                 }),
                 'default'

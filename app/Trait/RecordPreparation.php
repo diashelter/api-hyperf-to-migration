@@ -254,9 +254,7 @@ trait RecordPreparation
 
     protected function recordPrepGenerateId(string $strategy): string
     {
-        return $strategy === 'uuid7'
-            ? Uuid::uuid7()->toString()
-            : Uuid::uuid4()->toString();
+        return Uuid::uuid7()->toString();
     }
 
     /**

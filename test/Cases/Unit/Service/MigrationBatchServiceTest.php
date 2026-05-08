@@ -44,7 +44,7 @@ final class MigrationBatchServiceTest extends UnitTestCase
             ->once()
             ->with(Mockery::on(function (array $payload): bool {
                 return is_string($payload['id'] ?? null)
-                    && preg_match(self::UUID_PATTERN, $payload['id']) === 1
+                    && preg_match(self::UUID_V7_PATTERN, $payload['id']) === 1
                     && $payload['contract_id'] === 'contract-1'
                     && $payload['entity'] === 'companies'
                     && $payload['status'] === 'queued'

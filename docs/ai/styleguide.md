@@ -82,7 +82,7 @@ class SomeController
   "errors": [
     { "index": 4, "legacy_id": "LEG-005", "validation_errors": { "code": ["The code field is required."] } }
   ],
-  "id_mappings": { "LEG-001": "uuid-v4-...", "LEG-002": "uuid-v4-..." }
+  "id_mappings": { "LEG-001": "uuid-v7-...", "LEG-002": "uuid-v7-..." }
 }
 ```
 
@@ -90,7 +90,7 @@ class SomeController
 
 ```json
 {
-  "migration_batch_id": "uuid-v4-...",
+  "migration_batch_id": "uuid-v7-...",
   "entity": "import_records",
   "total_received": 1500,
   "status": "completed_with_errors",
@@ -138,17 +138,10 @@ if (isset($record['city'])) {
 ```php
 use Ramsey\Uuid\Uuid;
 
-// Default (most entities)
-$id = Uuid::uuid4()->toString();
-
-// Time-ordered, for high-volume entities
-protected function generateId(): string
-{
-    return Uuid::uuid7()->toString();
-}
+$id = Uuid::uuid7()->toString();
 ```
 
-UUID v7 reduces B-tree fragmentation on tables with millions of rows.
+All generated UUIDs use v7 to reduce B-tree fragmentation on indexed tables.
 
 ---
 

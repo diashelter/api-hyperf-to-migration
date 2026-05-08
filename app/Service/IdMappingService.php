@@ -42,7 +42,7 @@ class IdMappingService
                 'contract_id' => $contractId,
             ],
             [
-                'id' => Uuid::uuid4()->toString(),
+                'id' => Uuid::uuid7()->toString(),
                 'new_id' => $newId,
                 'migration_batch_id' => $batchId,
             ]
@@ -60,7 +60,7 @@ class IdMappingService
 
         foreach ($mappings as $legacyId => $newId) {
             $records[] = [
-                'id' => Uuid::uuid4()->toString(),
+                'id' => Uuid::uuid7()->toString(),
                 'entity' => $entity,
                 'legacy_id' => (string) $legacyId,
                 'new_id' => $newId,

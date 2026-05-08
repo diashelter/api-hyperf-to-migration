@@ -43,7 +43,7 @@ class ContractUserSource extends AbstractLegacySource
     public function idStrategy(): string
     {
         // Pivot não tem id próprio.
-        return 'uuid4';
+        return 'uuid7';
     }
 
     public function normalizeStrings(): bool

@@ -103,7 +103,7 @@ class ExportLayoutSyncService
 
         foreach ($legacyRows as $row) {
             $row = (array) $row;
-            $newId = Uuid::uuid4()->toString();
+            $newId = Uuid::uuid7()->toString();
             $format = strtoupper((string) ($row['formato'] ?? 'TEXTO'));
             $format = $format === '' ? 'TEXTO' : $format;
 
@@ -138,10 +138,11 @@ class ExportLayoutSyncService
         foreach ($codeToUuid as $code => $uuid) {
             Db::connection('default')->statement(
                 'INSERT INTO migration_id_mappings (id, entity, legacy_id, new_id, contract_id, created_at)
-                 VALUES (gen_random_uuid(), \'layouts_admin\', :legacy_id, :new_id, :contract_id, NOW())
+                 VALUES (:id, \'layouts_admin\', :legacy_id, :new_id, :contract_id, NOW())
                  ON CONFLICT ON CONSTRAINT uniq_entity_legacy_contract
                  DO UPDATE SET new_id = EXCLUDED.new_id',
                 [
+                    'id'          => Uuid::uuid7()->toString(),
                     'legacy_id'   => (string) $code,
                     'new_id'      => $uuid,
                     'contract_id' => $contractId,

@@ -100,7 +100,7 @@ MIGRATION_ENCRYPTED_API_KEY=v1... bash test/e2e/smoke-pull-mode.sh
 6. Usar keyset pagination (`:last_id`, `:limit`) para tabelas grandes.
 7. Sobrescrever `transformRow()` apenas para regras que não cabem no SQL.
 8. Sobrescrever `hasContractId()` para `false` quando o destino não tiver `contract_id`.
-9. Escolher `uuid7` para entidades de volume muito alto.
+9. Usar `uuid7` para IDs gerados pela aplicação (padrão do pipeline).
 10. Adicionar a Source em `EntityMetadataRegistry::sources()` **depois** de todas as dependências de FK.
 
 **Não paralelize entidades no orchestrator**: a ordem do registry é parte do contrato de consistência por FK.

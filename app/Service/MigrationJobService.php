@@ -24,7 +24,7 @@ class MigrationJobService
         $migrationScope ??= $legacyDb;
 
         return MigrationJob::query()->create([
-            'id' => Uuid::uuid4()->toString(),
+            'id' => Uuid::uuid7()->toString(),
             'legacy_db' => $legacyDb,
             // Column name kept for schema compatibility. In pull-mode this is
             // the legacy database namespace, not the destination contracts.id.

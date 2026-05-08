@@ -547,7 +547,7 @@ class ParallelInsertService
     {
         foreach ($records as &$record) {
             if (empty($record['id'])) {
-                $record['id'] = Uuid::uuid4()->toString();
+                $record['id'] = Uuid::uuid7()->toString();
             }
         }
 

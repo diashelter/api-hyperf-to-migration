@@ -54,7 +54,7 @@ final class ParallelInsertServiceTest extends UnitTestCase
         ]);
 
         $this->assertSame(['inserted' => 2, 'failed' => 0, 'errors' => []], $result);
-        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $capturedRecords[0]['id']);
+        $this->assertMatchesRegularExpression(self::UUID_V7_PATTERN, $capturedRecords[0]['id']);
         $this->assertSame('existing-id', $capturedRecords[1]['id']);
     }
 
@@ -131,7 +131,7 @@ final class ParallelInsertServiceTest extends UnitTestCase
         $this->assertCount(2, $chunks);
         $this->assertCount(2, $chunks[0]);
         $this->assertCount(1, $chunks[1]);
-        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $chunks[0][0]['id']);
+        $this->assertMatchesRegularExpression(self::UUID_V7_PATTERN, $chunks[0][0]['id']);
         $this->assertSame(2, $result['inserted']);
         $this->assertSame(1, $result['failed']);
         $this->assertSame([
@@ -183,7 +183,7 @@ final class ParallelInsertServiceTest extends UnitTestCase
         );
 
         $this->assertCount(2, $upsertCalls);
-        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $upsertCalls[0]['records'][0]['id']);
+        $this->assertMatchesRegularExpression(self::UUID_V7_PATTERN, $upsertCalls[0]['records'][0]['id']);
         $this->assertSame(['inserted' => 3, 'failed' => 0, 'errors' => []], $result);
     }
 }
