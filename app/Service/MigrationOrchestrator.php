@@ -95,17 +95,21 @@ class MigrationOrchestrator
             try {
                 $result = $this->entityMigrator->migrate($jobId, $source, $legacyConnection, $contractId);
 
-                if (($result['status'] ?? null) === 'failed') {
-                    $errorSummary[$entity] = $result['error_message'] ?? 'unknown error';
+                $resultStatus = (string) ($result['status'] ?? 'unknown');
+                $failed = (int) ($result['failed'] ?? 0);
+
+                if ($resultStatus === 'failed' || $resultStatus === 'completed_with_errors' || $failed > 0) {
+                    $errorSummary[$entity] = $result['error_message']
+                        ?? sprintf('Entity finished with status=%s failed=%d', $resultStatus, $failed);
                 }
 
                 $this->logger->info(sprintf(
                     '[job %s] entity %s done: status=%s inserted=%d failed=%d skipped=%d',
                     $jobId,
                     $entity,
-                    $result['status'] ?? 'unknown',
+                    $resultStatus,
                     (int) ($result['inserted'] ?? 0),
-                    (int) ($result['failed'] ?? 0),
+                    $failed,
                     (int) ($result['skipped'] ?? 0)
                 ));
             } catch (Throwable $e) {
