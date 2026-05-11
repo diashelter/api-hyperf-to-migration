@@ -53,6 +53,11 @@ class ConfrontationConciliationSource extends AbstractLegacySource
         return false;
     }
 
+    public function specialHandler(): ?string
+    {
+        return 'confrontation_conciliations_pivot';
+    }
+
     public function countSql(): ?string
     {
         return <<<'SQL'

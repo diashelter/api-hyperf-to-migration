@@ -442,6 +442,10 @@ class EntityMigrator
             return $this->handleContractUsersPivot($jobId, $source, $legacyConnection, $contractId);
         }
 
+        if ($handler === 'confrontation_conciliations_pivot') {
+            return $this->handleConfrontationConciliationsPivot($jobId, $source, $legacyConnection, $contractId);
+        }
+
         if ($handler === 'user_permissions_delete') {
             return $this->handleUserPermissionsDelete($jobId, $source, $legacyConnection, $contractId);
         }
@@ -466,6 +470,218 @@ class EntityMigrator
         $this->jobService->updateEntityProgress($jobId, $entity, $totals);
 
         return $totals;
+    }
+
+    /**
+     * Relacao `confrontation_conciliations` sem PK, sem timestamps e sem mapping proprio.
+     * Usa a chave natural unica (bank, financial) para idempotencia.
+     */
+    private function handleConfrontationConciliationsPivot(
+        string $jobId,
+        AbstractLegacySource $source,
+        string $legacyConnection,
+        string $contractId
+    ): array {
+        $entity = $source->entity();
+
+        $progress = $this->jobService->getEntityProgress($jobId, $entity);
+        $target = array_key_exists('target', $progress)
+            ? $progress['target']
+            : $source->count($legacyConnection);
+
+        $totals = [
+            'inserted' => (int) ($progress['inserted'] ?? 0),
+            'failed' => (int) ($progress['failed'] ?? 0),
+            'skipped' => (int) ($progress['skipped'] ?? 0),
+            'last_id' => $progress['last_id'] ?? null,
+            'target' => $target,
+            'status' => 'processing',
+            'started_at' => $progress['started_at'] ?? (string) now(),
+        ];
+
+        $this->jobService->updateEntityProgress($jobId, $entity, [
+            'status' => 'processing',
+            'started_at' => $totals['started_at'],
+            'last_id' => $totals['last_id'],
+            'target' => $target,
+        ]);
+
+        try {
+            $rows = $source->paginate($legacyConnection, null, $source->chunkSize());
+
+            if (! empty($rows)) {
+                $this->recordPrepPrefetchForeignKeys(
+                    $this->idMappingService,
+                    $source->fkMap(),
+                    $rows,
+                    $contractId
+                );
+
+                $records = [];
+                $failed = 0;
+
+                foreach ($rows as $row) {
+                    $confrontationId = ! empty($row['legacy_confrontation_id'])
+                        ? $this->idMappingService->resolve('confrontations', (string) $row['legacy_confrontation_id'], $contractId)
+                        : null;
+
+                    $bankRecordId = ! empty($row['legacy_confrontation_records_bank'])
+                        ? $this->idMappingService->resolve('confrontation_records', (string) $row['legacy_confrontation_records_bank'], $contractId)
+                        : null;
+
+                    $financialRecordId = ! empty($row['legacy_confrontation_records_financial'])
+                        ? $this->idMappingService->resolve('confrontation_records', (string) $row['legacy_confrontation_records_financial'], $contractId)
+                        : null;
+
+                    if ($confrontationId === null || $bankRecordId === null || $financialRecordId === null) {
+                        $failed++;
+                        continue;
+                    }
+
+                    $records[] = [
+                        'confrontation_id' => $confrontationId,
+                        'confrontation_records_bank' => $bankRecordId,
+                        'confrontation_records_financial' => $financialRecordId,
+                    ];
+                }
+
+                $inserted = 0;
+                $skipped = 0;
+
+                if (! empty($records)) {
+                    [$records, $alreadyExisting] = $this->filterExistingConfrontationConciliationRecords($records);
+                    $skipped += $alreadyExisting;
+                }
+
+                if (! empty($records)) {
+                    $connection = Db::connection('conciliador_web');
+                    $connection->beginTransaction();
+                    try {
+                        $inserted = $connection->table($source->targetTable())->insertOrIgnore($records);
+                        $connection->commit();
+                        $skipped += count($records) - $inserted;
+                    } catch (Throwable $e) {
+                        $connection->rollBack();
+                        $failed += count($records);
+                        throw $e;
+                    }
+                }
+
+                $lastRow = end($rows);
+                $lastId = isset($lastRow[$source->paginationKey()])
+                    ? (string) $lastRow[$source->paginationKey()]
+                    : null;
+
+                $totals['inserted'] += $inserted;
+                $totals['failed'] += $failed;
+                $totals['skipped'] += $skipped;
+                $totals['last_id'] = $lastId;
+            }
+
+            $totals['status'] = $totals['failed'] > 0 ? 'completed_with_errors' : 'completed';
+            if ($totals['failed'] > 0) {
+                $totals['error_message'] = sprintf('%d confrontation conciliation records could not resolve required FKs.', $totals['failed']);
+            }
+        } catch (Throwable $e) {
+            $totals['status'] = 'failed';
+            $totals['error_message'] = $e->getMessage();
+        }
+
+        $totals['finished_at'] = (string) now();
+        $this->jobService->updateEntityProgress($jobId, $entity, $totals);
+
+        $deltaInserted = $totals['inserted'] - (int) ($progress['inserted'] ?? 0);
+        $deltaFailed = $totals['failed'] - (int) ($progress['failed'] ?? 0);
+        $deltaSkipped = $totals['skipped'] - (int) ($progress['skipped'] ?? 0);
+        $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
+
+        return $totals;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array{0: array<int, array<string, mixed>>, 1: int}
+     */
+    private function filterExistingConfrontationConciliationRecords(array $records): array
+    {
+        if (empty($records)) {
+            return [$records, 0];
+        }
+
+        $uniqueRecords = [];
+        $bankIds = [];
+        $financialIds = [];
+        $skipped = 0;
+
+        foreach ($records as $record) {
+            $key = $this->confrontationConciliationRecordKey($record);
+
+            if ($key !== null && isset($uniqueRecords[$key])) {
+                $skipped++;
+                continue;
+            }
+
+            if ($key !== null) {
+                $uniqueRecords[$key] = $record;
+                $bankIds[(string) $record['confrontation_records_bank']] = true;
+                $financialIds[(string) $record['confrontation_records_financial']] = true;
+                continue;
+            }
+
+            $uniqueRecords[] = $record;
+        }
+
+        if (empty($bankIds) || empty($financialIds)) {
+            return [array_values($uniqueRecords), $skipped];
+        }
+
+        $existing = [];
+        foreach (array_chunk(array_keys($bankIds), 1000) as $bankIdChunk) {
+            $rows = Db::connection('conciliador_web')
+                ->table('confrontation_conciliations')
+                ->select(['confrontation_records_bank', 'confrontation_records_financial'])
+                ->whereIn('confrontation_records_bank', $bankIdChunk)
+                ->whereIn('confrontation_records_financial', array_keys($financialIds))
+                ->get();
+
+            foreach ($rows as $row) {
+                $row = (array) $row;
+                $key = $this->confrontationConciliationRecordKey($row);
+
+                if ($key !== null) {
+                    $existing[$key] = true;
+                }
+            }
+        }
+
+        $toInsert = [];
+        foreach ($uniqueRecords as $record) {
+            $key = $this->confrontationConciliationRecordKey($record);
+
+            if ($key !== null && isset($existing[$key])) {
+                $skipped++;
+                continue;
+            }
+
+            $toInsert[] = $record;
+        }
+
+        return [$toInsert, $skipped];
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function confrontationConciliationRecordKey(array $record): ?string
+    {
+        $bankId = isset($record['confrontation_records_bank']) ? (string) $record['confrontation_records_bank'] : '';
+        $financialId = isset($record['confrontation_records_financial']) ? (string) $record['confrontation_records_financial'] : '';
+
+        if ($bankId === '' || $financialId === '') {
+            return null;
+        }
+
+        return $bankId . ':' . $financialId;
     }
 
     /**
