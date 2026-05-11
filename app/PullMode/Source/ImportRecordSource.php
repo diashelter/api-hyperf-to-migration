@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace App\PullMode\Source;
 
+use Hyperf\DbConnection\Db;
+
 /**
  * Source legada → `import_records`. FKs: imports, import_sessions.
  *
@@ -35,6 +37,11 @@ class ImportRecordSource extends AbstractLegacySource
     public function chunkSize(): int
     {
         return 5000;
+    }
+
+    public function paginationKey(): string
+    {
+        return 'pagination_cursor';
     }
 
     public function idStrategy(): string
@@ -83,6 +90,7 @@ class ImportRecordSource extends AbstractLegacySource
             SELECT
                 importacao.uuid                                    AS legacy_id,
                 importacao.uuid                                    AS id,
+                importacao.fk_layoutempresa || '|' || importacao.uuid AS pagination_cursor,
                 'IMP-' || importacao.fk_layoutempresa              AS legacy_import_id,
                 'IS-' || importacao.fk_layoutempresa               AS legacy_import_session_id,
                 importacao.fk_regra                                AS legacy_id_rule,
@@ -141,13 +149,36 @@ class ImportRecordSource extends AbstractLegacySource
             JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
             WHERE importacao.fk_layout <> 0
             AND importacao.inclusao > NOW() - INTERVAL '60 days'
-              AND importacao.uuid > COALESCE(
-                  CAST(NULLIF(:last_id, '') AS UUID),
-                  '00000000-0000-0000-0000-000000000000'::UUID
+              AND (importacao.fk_layoutempresa, importacao.uuid) > (
+                  CAST(:last_layoutempresa AS BIGINT),
+                  CAST(:last_uuid AS UUID)
               )
-            ORDER BY fk_layoutempresa, importacao.uuid ASC
+            ORDER BY importacao.fk_layoutempresa ASC, importacao.uuid ASC
             LIMIT :limit
         SQL;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function paginate(string $connection, ?string $lastId, int $limit): array
+    {
+        [$lastLayoutEmpresa, $lastUuid] = $this->parsePaginationCursor($lastId);
+
+        $rows = Db::connection($connection)->select($this->sql(), [
+            'last_layoutempresa' => $lastLayoutEmpresa,
+            'last_uuid' => $lastUuid,
+            'limit' => $limit,
+        ]);
+
+        return array_map(static fn ($r) => (array) $r, $rows);
+    }
+
+    public function transformRow(array $row, string $contractId): array
+    {
+        unset($row['pagination_cursor']);
+
+        return $row;
     }
 
     public function validationRules(): array
@@ -158,5 +189,31 @@ class ImportRecordSource extends AbstractLegacySource
             'value' => 'nullable|numeric',
             'debit_credit' => 'nullable|in:D,C',
         ];
+    }
+
+    /**
+     * @return array{0: int, 1: string}
+     */
+    private function parsePaginationCursor(?string $lastId): array
+    {
+        $initial = [0, '00000000-0000-0000-0000-000000000000'];
+
+        if ($lastId === null || trim($lastId) === '') {
+            return $initial;
+        }
+
+        $parts = explode('|', $lastId, 2);
+        if (count($parts) !== 2) {
+            return $initial;
+        }
+
+        $layoutEmpresa = filter_var($parts[0], FILTER_VALIDATE_INT);
+        $uuid = trim($parts[1]);
+
+        if ($layoutEmpresa === false || $layoutEmpresa < 0 || $uuid === '') {
+            return $initial;
+        }
+
+        return [$layoutEmpresa, $uuid];
     }
 }
