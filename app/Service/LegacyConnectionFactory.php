@@ -20,6 +20,8 @@ use Throwable;
 
 class LegacyConnectionFactory
 {
+    private const BASE_CONNECTION = 'legacy_database';
+
     #[Inject]
     protected ConfigInterface $config;
 
@@ -39,14 +41,27 @@ class LegacyConnectionFactory
             throw new ValidationFailedException('Legacy database name is required.');
         }
 
-        $connetionName = 'legacy_database';
-        $config = $this->config->get("databases.{$connetionName}");
+        $connectionName = $this->connectionName($name);
+        $config = $this->config->get('databases.' . self::BASE_CONNECTION);
         $config['database'] = $name;
 
-        $this->registerConnection($connetionName, $config);
-        $this->smokeTest($connetionName);
+        $this->registerConnection($connectionName, $config);
+        $this->smokeTest($connectionName, $name);
 
-        return $connetionName;
+        return $connectionName;
+    }
+
+    private function connectionName(string $database): string
+    {
+        $slug = preg_replace('/[^A-Za-z0-9_]/', '_', $database) ?: 'database';
+        $slug = trim($slug, '_') ?: 'database';
+
+        return sprintf(
+            '%s_%s_%s',
+            self::BASE_CONNECTION,
+            strtolower($slug),
+            substr(sha1($database), 0, 12)
+        );
     }
 
     private function registerConnection(string $connectionName, array $config): void
@@ -54,13 +69,27 @@ class LegacyConnectionFactory
         $this->config->set("databases.{$connectionName}", $config);
     }
 
-    private function smokeTest(string $connectionName): void
+    private function smokeTest(string $connectionName, string $expectedDatabase): void
     {
         try {
-            Db::connection($connectionName)->select('SELECT 1');
+            $result = Db::connection($connectionName)->selectOne('SELECT current_database() AS db');
+            $actualDatabase = is_array($result)
+                ? (string) ($result['db'] ?? '')
+                : (string) ($result->db ?? '');
+
+            if ($actualDatabase !== $expectedDatabase) {
+                throw new ValidationFailedException(sprintf(
+                    "Connected legacy database mismatch: expected '%s', got '%s' on connection '%s'.",
+                    $expectedDatabase,
+                    $actualDatabase,
+                    $connectionName
+                ));
+            }
+        } catch (ValidationFailedException $e) {
+            throw $e;
         } catch (Throwable $e) {
             throw new ValidationFailedException(
-                "Failed to connect to legacy database '{$connectionName}': " . $e->getMessage()
+                "Failed to connect to legacy database '{$expectedDatabase}' using connection '{$connectionName}': " . $e->getMessage()
             );
         }
     }
