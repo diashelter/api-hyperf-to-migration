@@ -82,21 +82,31 @@ class CompanyLayoutFixedAccountSource extends AbstractLegacySource
     {
         return <<<'SQL'
             SELECT 
-                'LF-' || pk AS legacy_id,
-                pk AS legacy_company_layout_id,
-                conta_fixa AS bank_account,
-                contas_fixas_modelo
+                'LF-' || layout_empresa.pk AS legacy_id,
+                layout_empresa.pk AS legacy_company_layout_id,
+                layout_empresa.conta_fixa AS bank_account,
+                layout_empresa.contas_fixas_modelo
             FROM layout_empresa
-            WHERE conta_fixa_hab = true
-              AND pk > COALESCE(CAST(NULLIF(REGEXP_REPLACE(:last_id, '^LF-', ''), '') AS INTEGER), 0)
-            ORDER BY pk
+            JOIN layout ON layout.pk = layout_empresa.fk_layoutimp AND layout.visivel = 1
+            WHERE layout_empresa.conta_fixa_hab = true
+              AND layout_empresa.fk_empresa <> 0
+              AND layout_empresa.fk_layoutimp <> 0
+              AND layout_empresa.pk > COALESCE(CAST(NULLIF(REGEXP_REPLACE(:last_id, '^LF-', ''), '') AS INTEGER), 0)
+            ORDER BY layout_empresa.pk
             LIMIT :limit
         SQL;
     }
 
     public function countSql(): ?string
     {
-        return 'SELECT COUNT(*) AS count FROM layout_empresa WHERE conta_fixa_hab = true';
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM layout_empresa
+            JOIN layout ON layout.pk = layout_empresa.fk_layoutimp AND layout.visivel = 1
+            WHERE layout_empresa.conta_fixa_hab = true
+              AND layout_empresa.fk_empresa <> 0
+              AND layout_empresa.fk_layoutimp <> 0
+        SQL;
     }
 
     public function transformRow(array $row, string $contractId): array

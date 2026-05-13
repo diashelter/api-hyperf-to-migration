@@ -116,4 +116,18 @@ final class CompanyLayoutFixedAccountSourceTest extends UnitTestCase
         $this->assertFalse($source->hasContractId());
         $this->assertSame('legacy_company_layout_id', $source->paginationKey());
     }
+
+    public function testQueriesOnlyReadFixedAccountsForMigratedCompanyLayouts(): void
+    {
+        $source = new CompanyLayoutFixedAccountSource();
+
+        foreach ([$source->sql(), $source->countSql()] as $query) {
+            $this->assertStringContainsString(
+                'JOIN layout ON layout.pk = layout_empresa.fk_layoutimp AND layout.visivel = 1',
+                $query
+            );
+            $this->assertStringContainsString('layout_empresa.fk_empresa <> 0', $query);
+            $this->assertStringContainsString('layout_empresa.fk_layoutimp <> 0', $query);
+        }
+    }
 }
