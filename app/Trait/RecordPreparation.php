@@ -14,6 +14,7 @@ namespace App\Trait;
 
 use App\Service\IdMappingService;
 use Ramsey\Uuid\Uuid;
+use RuntimeException;
 
 /**
  * Lógica de preparação de registros (normalize/hash/UUID/FK resolution)
@@ -150,16 +151,32 @@ trait RecordPreparation
         string $contractId
     ): array {
         if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId)
-                ?? $record['contract_id'] ?? null;
+            $legacyContractId = (string) $record['legacy_contract_id'];
+            $resolved = $idMappingService->resolve('contracts', $legacyContractId, $contractId);
+
+            if ($resolved === null && empty($record['contract_id'])) {
+                throw new RuntimeException(sprintf(
+                    "Contract mapping not found for legacy_id '%s' in migration scope '%s'.",
+                    $legacyContractId,
+                    $contractId
+                ));
+            }
+
+            $record['contract_id'] = $resolved ?? $record['contract_id'];
             unset($record['legacy_contract_id']);
         }
 
         if (empty($record['contract_id'])) {
             $resolved = $idMappingService->resolve('contracts', $contractId, $contractId);
-            if ($resolved !== null) {
-                $record['contract_id'] = $resolved;
+
+            if ($resolved === null) {
+                throw new RuntimeException(sprintf(
+                    "Contract mapping not found for migration scope '%s'.",
+                    $contractId
+                ));
             }
+
+            $record['contract_id'] = $resolved;
         }
 
         return $record;

@@ -108,8 +108,11 @@ class ContractSource extends AbstractLegacySource
         return array_map(static fn ($r) => (array) $r, $rows);
     }
 
-    public function transformRow(array $row, string $_contractId): array
+    public function transformRow(array $row, string $contractId): array
     {
+        $row['legacy_id'] = $contractId;
+        $row['legacy_database_id'] = $contractId;
+
         $legacyStatus = $row['legacy_status_contract'] ?? null;
         unset($row['legacy_status_contract']);
 

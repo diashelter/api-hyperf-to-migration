@@ -139,13 +139,17 @@ class MigrationJobService
 
     public function markFailed(string $jobId, string $error): void
     {
-        MigrationJob::query()
-            ->where('id', $jobId)
-            ->update([
-                'status' => 'failed',
-                'error_summary' => json_encode(['message' => $error]),
-                'finished_at' => now(),
-            ]);
+        $job = MigrationJob::query()->find($jobId);
+
+        if (! $job) {
+            return;
+        }
+
+        $job->status = 'failed';
+        $job->current_entity = null;
+        $job->error_summary = ['message' => $error];
+        $job->finished_at = now();
+        $job->save();
     }
 
     public function getStatus(string $jobId): ?array

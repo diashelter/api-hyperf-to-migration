@@ -47,8 +47,9 @@ class MigrationOrchestrator
      * Itera as Sources em ORDEM DE FK (definida em EntityMetadataRegistry::sources()),
      * delega cada uma ao EntityMigrator, e mantém o status do job atualizado.
      *
-     * Falha numa entidade é capturada e marcada como `failed` em `entity_progress`,
-     * mas o job continua para as demais (decisão "continuar em falha" travada no PLAN).
+     * Falha numa entidade é capturada e marcada como `failed` em `entity_progress`.
+     * A entidade `contracts` é a raiz do tenant; sem ela, todas as FKs por contrato
+     * ficam inválidas, então o job é abortado cedo para evitar falhas em cascata.
      */
     public function run(string $jobId): void
     {
@@ -112,6 +113,13 @@ class MigrationOrchestrator
                     $failed,
                     (int) ($result['skipped'] ?? 0)
                 ));
+
+                if ($this->shouldAbortAfterEntity($entity, $resultStatus, $failed)) {
+                    $message = $this->criticalEntityFailureMessage($entity, $errorSummary[$entity] ?? null);
+                    $this->jobService->markFailed($jobId, $message);
+                    $this->logger->error("[job {$jobId}] {$message}");
+                    return;
+                }
             } catch (Throwable $e) {
                 $errorSummary[$entity] = $e->getMessage();
                 $this->jobService->updateEntityProgress($jobId, $entity, [
@@ -119,9 +127,37 @@ class MigrationOrchestrator
                     'error_message' => $e->getMessage(),
                 ]);
                 $this->logger->error("[job {$jobId}] entity {$entity} crashed: " . $e->getMessage());
+
+                if ($this->shouldAbortAfterEntity($entity, 'failed', 0)) {
+                    $message = $this->criticalEntityFailureMessage($entity, $e->getMessage());
+                    $this->jobService->markFailed($jobId, $message);
+                    $this->logger->error("[job {$jobId}] {$message}");
+                    return;
+                }
             }
         }
 
         $this->jobService->markCompleted($jobId, $errorSummary ?: null);
+    }
+
+    private function shouldAbortAfterEntity(string $entity, string $status, int $failed): bool
+    {
+        if ($entity !== 'contracts') {
+            return false;
+        }
+
+        return $status !== 'completed' || $failed > 0;
+    }
+
+    private function criticalEntityFailureMessage(string $entity, ?string $cause): string
+    {
+        $message = sprintf(
+            "Critical entity '%s' failed; aborting migration before dependent entities.",
+            $entity
+        );
+
+        return $cause !== null && $cause !== ''
+            ? "{$message} Cause: {$cause}"
+            : $message;
     }
 }

@@ -71,8 +71,8 @@ return [
         'prefix' => '',
         'schema' => 'public',
         'pool' => [
-            'min_connections' => (int) env('DB_LEGACY_POOL_MIN', 4),
-            'max_connections' => (int) env('DB_LEGACY_POOL_MAX', 32),
+            'min_connections' => (int) env('DB_LEGACY_POOL_MIN', 1),
+            'max_connections' => (int) env('DB_LEGACY_POOL_MAX', 8),
             'connect_timeout' => 10.0,
             'wait_timeout' => 3.0,
             'heartbeat' => -1,

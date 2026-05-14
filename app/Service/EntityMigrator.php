@@ -17,9 +17,12 @@ use App\Trait\RecordPreparation;
 use Hyperf\Coroutine\Parallel;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
+use RuntimeException;
+use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
 use Throwable;
 
+use function Hyperf\Support\env;
 use function Hyperf\Support\now;
 
 class EntityMigrator
@@ -66,7 +69,9 @@ class EntityMigrator
 
         $target = array_key_exists('target', $progress)
             ? $progress['target']
-            : $source->count($legacyConnection);
+            : $this->withTransientDatabaseRetry(
+                static fn (): ?int => $source->count($legacyConnection)
+            );
 
         $totals = [
             'inserted' => (int) ($progress['inserted'] ?? 0),
@@ -103,10 +108,12 @@ class EntityMigrator
             $channel = new Channel(2);
             $producerError = null;
             $consumerError = null;
+            $cancelled = false;
 
             $parallel = new Parallel(2);
 
             $parallel->add(function () use (
+                $entity,
                 $source,
                 $legacyConnection,
                 $contractId,
@@ -114,12 +121,24 @@ class EntityMigrator
                 $paginationKey,
                 $lastId,
                 $channel,
+                &$cancelled,
                 &$producerError
             ) {
                 $cursor = $lastId;
                 try {
                     while (true) {
-                        $rows = $source->paginate($legacyConnection, $cursor, $chunkSize);
+                        if ($cancelled) {
+                            break;
+                        }
+
+                        $rows = $this->withTransientDatabaseRetry(
+                            static fn (): array => $source->paginate($legacyConnection, $cursor, $chunkSize)
+                        );
+
+                        if ($cancelled) {
+                            break;
+                        }
+
                         if (empty($rows)) {
                             break;
                         }
@@ -130,10 +149,20 @@ class EntityMigrator
                         $lastRow = end($rows);
                         $newCursor = isset($lastRow[$paginationKey]) ? (string) $lastRow[$paginationKey] : null;
                         $rowCount = count($rows);
-                        $channel->push([
+
+                        $pushed = $channel->push([
                             'transformed_batch' => $batch,
                             'last_id' => $newCursor,
-                        ]);
+                        ], 5.0);
+
+                        if ($pushed === false) {
+                            if ($cancelled) {
+                                break;
+                            }
+
+                            throw new RuntimeException("Timed out while sending batch for entity '{$entity}' to the migration channel.");
+                        }
+
                         $cursor = $newCursor;
                         if ($rowCount < $chunkSize) {
                             break;
@@ -142,7 +171,9 @@ class EntityMigrator
                 } catch (Throwable $e) {
                     $producerError = $e;
                 } finally {
-                    $channel->push(null);
+                    if (! $cancelled) {
+                        $channel->push(null);
+                    }
                 }
             });
 
@@ -159,13 +190,14 @@ class EntityMigrator
                 $jobId,
                 $channel,
                 $useCopy,
+                &$cancelled,
                 &$totals,
                 &$consumerError
             ) {
                 try {
                     while (true) {
                         $msg = $channel->pop();
-                        if ($msg === null) {
+                        if ($msg === false || $msg === null) {
                             break;
                         }
 
@@ -255,10 +287,8 @@ class EntityMigrator
                     }
                 } catch (Throwable $e) {
                     $consumerError = $e;
-                    // drena o channel para liberar o producer caso ainda esteja produzindo
-                    while ($channel->pop(0.001) !== false) {
-                        // discard
-                    }
+                    $cancelled = true;
+                    $channel->close();
                 }
             });
 
@@ -287,6 +317,74 @@ class EntityMigrator
         $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
 
         return $totals;
+    }
+
+    /**
+     * Reexecuta leituras do banco legado quando a falha é claramente transitória
+     * (queda de conexão, limite temporário de recursos ou restart do servidor).
+     *
+     * @template T
+     * @param callable(): T $operation
+     * @return T
+     */
+    private function withTransientDatabaseRetry(callable $operation): mixed
+    {
+        $maxAttempts = max(1, (int) env('MIGRATION_TRANSIENT_DB_RETRY_ATTEMPTS', 3));
+        $delayMs = max(0, (int) env('MIGRATION_TRANSIENT_DB_RETRY_DELAY_MS', 250));
+        $attempt = 0;
+
+        while (true) {
+            ++$attempt;
+
+            try {
+                return $operation();
+            } catch (Throwable $e) {
+                if ($attempt >= $maxAttempts || ! $this->isTransientDatabaseError($e)) {
+                    throw $e;
+                }
+
+                $this->sleepBeforeTransientRetry($delayMs * (2 ** ($attempt - 1)));
+            }
+        }
+    }
+
+    private function isTransientDatabaseError(Throwable $e): bool
+    {
+        $message = $e->getMessage();
+
+        foreach ([
+            'SQLSTATE[08000]',
+            'SQLSTATE[08001]',
+            'SQLSTATE[08006]',
+            'SQLSTATE[53300]',
+            'SQLSTATE[57P01]',
+            'Resource temporarily unavailable',
+            'could not send SSL negotiation packet',
+            'server closed the connection unexpectedly',
+            'terminating connection due to administrator command',
+            'could not connect to server',
+            'Connection refused',
+        ] as $needle) {
+            if (str_contains($message, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function sleepBeforeTransientRetry(int $delayMs): void
+    {
+        if ($delayMs <= 0) {
+            return;
+        }
+
+        if (Coroutine::getCid() >= 0) {
+            Coroutine::sleep($delayMs / 1000);
+            return;
+        }
+
+        usleep($delayMs * 1000);
     }
 
     /**
@@ -444,6 +542,10 @@ class EntityMigrator
 
         if ($handler === 'confrontation_conciliations_pivot') {
             return $this->handleConfrontationConciliationsPivot($jobId, $source, $legacyConnection, $contractId);
+        }
+
+        if ($handler === 'user_company_restrictions_pivot') {
+            return $this->handleUserCompanyRestrictionsPivot($jobId, $source, $legacyConnection, $contractId);
         }
 
         if ($handler === 'user_permissions_delete') {
@@ -906,6 +1008,242 @@ class EntityMigrator
         }
 
         return $contractId . ':' . $userId;
+    }
+
+    /**
+     * Relacao `user_company_restrictions` por chave composta, sem id, sem timestamps
+     * e sem mappings proprios. Usa (contract_id, user_id, company_id) para idempotencia.
+     */
+    private function handleUserCompanyRestrictionsPivot(
+        string $jobId,
+        AbstractLegacySource $source,
+        string $legacyConnection,
+        string $contractId
+    ): array {
+        $entity = $source->entity();
+
+        $progress = $this->jobService->getEntityProgress($jobId, $entity);
+        $lastId = $progress['last_id'] ?? null;
+        $target = array_key_exists('target', $progress)
+            ? $progress['target']
+            : $source->count($legacyConnection);
+
+        $totals = [
+            'inserted' => (int) ($progress['inserted'] ?? 0),
+            'failed' => (int) ($progress['failed'] ?? 0),
+            'skipped' => (int) ($progress['skipped'] ?? 0),
+            'last_id' => $lastId,
+            'target' => $target,
+            'status' => 'processing',
+            'started_at' => $progress['started_at'] ?? (string) now(),
+        ];
+
+        $this->jobService->updateEntityProgress($jobId, $entity, [
+            'status' => 'processing',
+            'started_at' => $totals['started_at'],
+            'last_id' => $lastId,
+            'target' => $target,
+        ]);
+
+        try {
+            $resolvedContractId = $this->idMappingService->resolve('contracts', $contractId, $contractId);
+
+            if ($resolvedContractId === null) {
+                throw new \RuntimeException("Contract '{$contractId}' not found in id_mappings; run contracts migration first.");
+            }
+
+            $chunkSize = $source->chunkSize();
+
+            while (true) {
+                $rows = $source->paginate($legacyConnection, $lastId, $chunkSize);
+
+                if (empty($rows)) {
+                    break;
+                }
+
+                $this->recordPrepPrefetchForeignKeys(
+                    $this->idMappingService,
+                    $source->fkMap(),
+                    $rows,
+                    $contractId
+                );
+
+                $records = [];
+                $failed = 0;
+
+                foreach ($rows as $row) {
+                    $userId = ! empty($row['legacy_user_id'])
+                        ? $this->idMappingService->resolve('users', (string) $row['legacy_user_id'], $contractId)
+                        : null;
+
+                    $companyId = ! empty($row['legacy_company_id'])
+                        ? $this->idMappingService->resolve('companies', (string) $row['legacy_company_id'], $contractId)
+                        : null;
+
+                    if ($userId === null || $companyId === null) {
+                        $failed++;
+                        continue;
+                    }
+
+                    $records[] = [
+                        'contract_id' => $resolvedContractId,
+                        'user_id' => $userId,
+                        'company_id' => $companyId,
+                    ];
+                }
+
+                $inserted = 0;
+                $skipped = 0;
+
+                if (! empty($records)) {
+                    [$records, $alreadyExisting] = $this->filterExistingUserCompanyRestrictionRecords($records);
+                    $skipped += $alreadyExisting;
+                }
+
+                if (! empty($records)) {
+                    $connection = Db::connection('conciliador_web');
+                    $connection->beginTransaction();
+                    try {
+                        $inserted = $connection->table('user_company_restrictions')->insertOrIgnore($records);
+                        $connection->commit();
+                        $skipped += count($records) - $inserted;
+                    } catch (Throwable $e) {
+                        $connection->rollBack();
+                        $failed += count($records);
+                        throw $e;
+                    }
+                }
+
+                $lastRow = end($rows);
+                $lastId = isset($lastRow[$source->paginationKey()])
+                    ? (string) $lastRow[$source->paginationKey()]
+                    : null;
+
+                $totals['inserted'] += $inserted;
+                $totals['failed'] += $failed;
+                $totals['skipped'] += $skipped;
+                $totals['last_id'] = $lastId;
+
+                $this->jobService->updateEntityProgress($jobId, $entity, [
+                    'last_id' => $lastId,
+                    'inserted' => $totals['inserted'],
+                    'failed' => $totals['failed'],
+                    'skipped' => $totals['skipped'],
+                ]);
+
+                if (count($rows) < $chunkSize) {
+                    break;
+                }
+            }
+
+            $totals['status'] = $totals['failed'] > 0 ? 'completed_with_errors' : 'completed';
+            if ($totals['failed'] > 0) {
+                $totals['error_message'] = sprintf('%d user company restriction records could not resolve required FKs.', $totals['failed']);
+            }
+        } catch (Throwable $e) {
+            $totals['status'] = 'failed';
+            $totals['error_message'] = $e->getMessage();
+        }
+
+        $totals['finished_at'] = (string) now();
+        $this->jobService->updateEntityProgress($jobId, $entity, $totals);
+
+        $deltaInserted = $totals['inserted'] - (int) ($progress['inserted'] ?? 0);
+        $deltaFailed = $totals['failed'] - (int) ($progress['failed'] ?? 0);
+        $deltaSkipped = $totals['skipped'] - (int) ($progress['skipped'] ?? 0);
+        $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
+
+        return $totals;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array{0: array<int, array<string, mixed>>, 1: int}
+     */
+    private function filterExistingUserCompanyRestrictionRecords(array $records): array
+    {
+        if (empty($records)) {
+            return [$records, 0];
+        }
+
+        $uniqueRecords = [];
+        $contractIds = [];
+        $userIds = [];
+        $companyIds = [];
+        $skipped = 0;
+
+        foreach ($records as $record) {
+            $key = $this->userCompanyRestrictionRecordKey($record);
+
+            if ($key !== null && isset($uniqueRecords[$key])) {
+                $skipped++;
+                continue;
+            }
+
+            if ($key !== null) {
+                $uniqueRecords[$key] = $record;
+                $contractIds[(string) $record['contract_id']] = true;
+                $userIds[(string) $record['user_id']] = true;
+                $companyIds[(string) $record['company_id']] = true;
+                continue;
+            }
+
+            $uniqueRecords[] = $record;
+        }
+
+        if (empty($contractIds) || empty($userIds) || empty($companyIds)) {
+            return [array_values($uniqueRecords), $skipped];
+        }
+
+        $existing = [];
+        foreach (array_chunk(array_keys($userIds), 1000) as $userIdChunk) {
+            $rows = Db::connection('conciliador_web')
+                ->table('user_company_restrictions')
+                ->select(['contract_id', 'user_id', 'company_id'])
+                ->whereIn('contract_id', array_keys($contractIds))
+                ->whereIn('user_id', $userIdChunk)
+                ->whereIn('company_id', array_keys($companyIds))
+                ->get();
+
+            foreach ($rows as $row) {
+                $row = (array) $row;
+                $key = $this->userCompanyRestrictionRecordKey($row);
+
+                if ($key !== null) {
+                    $existing[$key] = true;
+                }
+            }
+        }
+
+        $toInsert = [];
+        foreach ($uniqueRecords as $record) {
+            $key = $this->userCompanyRestrictionRecordKey($record);
+
+            if ($key !== null && isset($existing[$key])) {
+                $skipped++;
+                continue;
+            }
+
+            $toInsert[] = $record;
+        }
+
+        return [$toInsert, $skipped];
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function userCompanyRestrictionRecordKey(array $record): ?string
+    {
+        $contractId = isset($record['contract_id']) ? (string) $record['contract_id'] : '';
+        $userId = isset($record['user_id']) ? (string) $record['user_id'] : '';
+        $companyId = isset($record['company_id']) ? (string) $record['company_id'] : '';
+
+        if ($contractId === '' || $userId === '' || $companyId === '') {
+            return null;
+        }
+
+        return $contractId . ':' . $userId . ':' . $companyId;
     }
 
     /**
