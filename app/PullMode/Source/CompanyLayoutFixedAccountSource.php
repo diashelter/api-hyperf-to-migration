@@ -88,6 +88,8 @@ class CompanyLayoutFixedAccountSource extends AbstractLegacySource
                 contas_fixas_modelo
             FROM layout_empresa
             WHERE conta_fixa_hab = true
+              AND fk_empresa <> 0
+              AND fk_layoutimp <> 0
               AND pk > COALESCE(CAST(NULLIF(REGEXP_REPLACE(:last_id, '^LF-', ''), '') AS INTEGER), 0)
             ORDER BY pk
             LIMIT :limit
@@ -96,7 +98,7 @@ class CompanyLayoutFixedAccountSource extends AbstractLegacySource
 
     public function countSql(): ?string
     {
-        return 'SELECT COUNT(*) AS count FROM layout_empresa WHERE conta_fixa_hab = true';
+        return 'SELECT COUNT(*) AS count FROM layout_empresa WHERE conta_fixa_hab = true AND fk_empresa <> 0 AND fk_layoutimp <> 0';
     }
 
     public function transformRow(array $row, string $contractId): array

@@ -135,6 +135,8 @@ class ImportRecordSource extends AbstractLegacySource
                     WHEN importacao.fk_conciliacao IS NOT NULL THEN 1
                     ELSE 0
                 END                                     AS is_conciliated,
+                        CASE aut
+                WHEN 'M' THEN TRUE ELSE FALSE END AS is_manual, 
                 CASE importacao.situacao_confronto
                     WHEN 'CO' THEN 'Y'
                     WHEN 'NC' THEN 'N'
