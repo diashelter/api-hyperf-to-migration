@@ -38,7 +38,7 @@ final class RateLimitMiddlewareTest extends UnitTestCase
 
     public function testProcessStartsRateLimitWindowForFirstStandardRequest(): void
     {
-        $redis = $this->createRedisFake('0');
+        $redis = $this->createRedisFake(1);
 
         $expectedResponse = $this->createStub(ResponseInterface::class);
         $handler = $this->createMock(RequestHandlerInterface::class);
@@ -55,14 +55,14 @@ final class RateLimitMiddlewareTest extends UnitTestCase
 
         $this->assertSame($expectedResponse, $middleware->process($request, $handler));
         $this->assertSame([
-            ['get', 'migration_rate:contract-1:standard'],
-            ['setex', 'migration_rate:contract-1:standard', 60, '1'],
+            ['incr', 'migration_rate:contract-1:standard'],
+            ['expire', 'migration_rate:contract-1:standard', 60],
         ], $redis->calls);
     }
 
     public function testProcessIncrementsBulkCounterWhenRequestIsWithinLimit(): void
     {
-        $redis = $this->createRedisFake('1');
+        $redis = $this->createRedisFake(2);
 
         $expectedResponse = $this->createStub(ResponseInterface::class);
         $handler = $this->createMock(RequestHandlerInterface::class);
@@ -79,14 +79,13 @@ final class RateLimitMiddlewareTest extends UnitTestCase
 
         $this->assertSame($expectedResponse, $middleware->process($request, $handler));
         $this->assertSame([
-            ['get', 'migration_rate:contract-1:bulk'],
             ['incr', 'migration_rate:contract-1:bulk'],
         ], $redis->calls);
     }
 
     public function testProcessRejectsRequestsThatExceededTheLimit(): void
     {
-        $redis = $this->createRedisFake('2', 27);
+        $redis = $this->createRedisFake(3, 27);
 
         [$responseFactory, $response] = $this->mockJsonResponse(
             429,
@@ -109,8 +108,31 @@ final class RateLimitMiddlewareTest extends UnitTestCase
 
         $this->assertSame($response, $middleware->process($request, $handler));
         $this->assertSame([
-            ['get', 'migration_rate:contract-1:bulk'],
+            ['incr', 'migration_rate:contract-1:bulk'],
             ['ttl', 'migration_rate:contract-1:bulk'],
+        ], $redis->calls);
+    }
+
+    public function testProcessUsesLegacyDatabaseFromQueryStringAsRateLimitScope(): void
+    {
+        $redis = $this->createRedisFake(1);
+
+        $expectedResponse = $this->createStub(ResponseInterface::class);
+        $handler = $this->createMock(RequestHandlerInterface::class);
+        $handler->expects($this->once())
+            ->method('handle')
+            ->willReturn($expectedResponse);
+
+        $middleware = new RateLimitMiddleware($redis, $this->createStub(HttpResponse::class));
+        $request = (new Request(
+            'GET',
+            new Uri('http://localhost/api/v1/migration/database/availability?legacy_db=cont_focons')
+        ))->withQueryParams(['legacy_db' => 'cont_focons']);
+
+        $this->assertSame($expectedResponse, $middleware->process($request, $handler));
+        $this->assertSame([
+            ['incr', 'migration_rate:cont_focons:standard'],
+            ['expire', 'migration_rate:cont_focons:standard', 60],
         ], $redis->calls);
     }
 
@@ -135,37 +157,30 @@ final class RateLimitMiddlewareTest extends UnitTestCase
         return [$responseFactory, $response];
     }
 
-    private function createRedisFake(string $getResult, int $ttlResult = 0): Redis
+    private function createRedisFake(int $incrResult, int $ttlResult = 0): Redis
     {
-        return new class($getResult, $ttlResult) extends Redis {
+        return new class($incrResult, $ttlResult) extends Redis {
             /** @var list<array<int, int|string>> */
             public array $calls = [];
 
             public function __construct(
-                private readonly string $getResult,
+                private readonly int $incrResult,
                 private readonly int $ttlResult
             ) {
-            }
-
-            public function get(string $key): string
-            {
-                $this->calls[] = ['get', $key];
-
-                return $this->getResult;
-            }
-
-            public function setex(string $key, int $ttl, string $value): bool
-            {
-                $this->calls[] = ['setex', $key, $ttl, $value];
-
-                return true;
             }
 
             public function incr(string $key): int
             {
                 $this->calls[] = ['incr', $key];
 
-                return 1;
+                return $this->incrResult;
+            }
+
+            public function expire(string $key, int $seconds): bool
+            {
+                $this->calls[] = ['expire', $key, $seconds];
+
+                return true;
             }
 
             public function ttl(string $key): int
