@@ -220,7 +220,7 @@ trait RecordPreparation
             }
 
             $record['created_at'] = $record['created_at'] ?? $now;
-            $record['updated_at'] = $record['updated_at'] ?? $now;
+            $record['updated_at'] = $record['updated_at'] ?? null;
 
             $record = $resolveForeignKeysFn($record, $contractId);
 

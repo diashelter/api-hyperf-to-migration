@@ -26,6 +26,8 @@ use App\PullMode\Source\ImportRecordSource;
 use App\PullMode\Source\ImportSessionSource;
 use App\PullMode\Source\ImportSource;
 use App\PullMode\Source\LayoutSource;
+use App\PullMode\Source\OpenFinanceConectionsAccountsSource;
+use App\PullMode\Source\OpenFinanceConectionsSource;
 use App\PullMode\Source\PeopleSource;
 use App\PullMode\Source\PeopleVinculatedSource;
 use App\PullMode\Source\PlanItemSource;
@@ -70,6 +72,8 @@ class EntityMetadataRegistry
             CompanyLayoutSource::class,
             CompanyLayoutFixedAccountSource::class,
             UserCompanyRestrictionSource::class,
+            OpenFinanceConectionsSource::class,
+            OpenFinanceConectionsAccountsSource::class,
 
             PeopleSource::class,
             PeopleVinculatedSource::class,
