@@ -7,16 +7,13 @@ services:
     ports:
       - "9500:9500"
       - "9501:9501"
-    environment:
-      - APP_ENV=dev
-      - SCAN_CACHEABLE=false
     depends_on:
       - migrator-postgres
       - redis
     networks:
       - conciliador-net
-      # - network_public
-      - app-network
+      - network_public
+      # - app-network
 
   migrator-worker:
     container_name: conciliador-migrator-worker
@@ -32,8 +29,8 @@ services:
       - redis
     networks:
       - conciliador-net
-      # - network_public
-      - app-network
+      - network_public
+      # - app-network
     # Mesma imagem da API; o consumer da fila é forkado via `processes` em
     # config/autoload/async_queue.php. Permite escalar horizontalmente
     # com `docker compose up -d --scale migrator-worker=N`.
@@ -43,10 +40,6 @@ services:
     image: postgres:16-alpine
     ports:
       - "5433:5432"
-    environment:
-      POSTGRES_DB: ${DB_DATABASE:-conciliador}
-      POSTGRES_USER: ${DB_USERNAME:-conciliador}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-conciliador}
     volumes:
       - migrator_postgres_data:/var/lib/postgresql/data
     networks:
@@ -71,9 +64,9 @@ volumes:
 networks:
   conciliador-net:
     name: conciliador-net
-  # network_public:
-    # name: network_public
-    # external: true
-  app-network:
-    name: conciliadorcontabil-dev_app-network
+  network_public:
+    name: network_public
     external: true
+  # app-network:
+  #   name: conciliadorcontabil-dev_app-network
+  #   external: true
