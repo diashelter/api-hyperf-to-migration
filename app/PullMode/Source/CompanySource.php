@@ -46,7 +46,7 @@ class CompanySource extends AbstractLegacySource
                 pk                                                  AS code,
                 codigoexterno                                       AS external_code,
                 razaosocial                                         AS corporate_name,
-                REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g')            AS cpf_cnpj,
+                LEFT(REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g'), 14)   AS cpf_cnpj,
                 telefone                                            AS phone,
                 endereco                                            AS street,
                 numero                                              AS "number",
@@ -62,7 +62,7 @@ class CompanySource extends AbstractLegacySource
                      ELSE fk_pcontasconc END                        AS legacy_plan_id,
                 CASE WHEN fk_plano_contas = 0 THEN NULL
                      ELSE fk_plano_contas END                       AS legacy_rules_sharing_id,
-                INITCAP(tributacao)                                 AS tax_regime,
+                COALESCE(INITCAP(tributacao), 'Outros')             AS tax_regime,
                 CASE utilizaparticipante WHEN 1 THEN true
                      ELSE false END                                 AS use_participant,
                 COALESCE(hab_centrocusto, FALSE)                    AS use_cost_center,
@@ -72,6 +72,11 @@ class CompanySource extends AbstractLegacySource
             WHERE pk <> 0
             ORDER BY pk
         SQL;
+    }
+
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM empresas WHERE pk <> 0';
     }
 
     public function validationRules(): array

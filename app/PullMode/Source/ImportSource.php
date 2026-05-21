@@ -39,6 +39,20 @@ class ImportSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count FROM (
+                SELECT 1
+                FROM importacao
+                JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
+                WHERE fk_layout <> 0
+                GROUP BY importacao.fk_empresa, fk_layoutempresa
+                HAVING MAX(importacao.inclusao) > NOW() - INTERVAL '60 days'
+            ) AS sub
+        SQL;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'
@@ -56,7 +70,8 @@ class ImportSource extends AbstractLegacySource
                 fk_layoutempresa                                AS legacy_company_layout_id,
                 layout_empresa.saldo_anterior                   AS previous_balance,
                 COUNT(fk_layoutempresa) > 10000                 AS is_big_import,
-                1                                               AS total_files
+                1                                               AS total_files,
+                MAX(importacao.inclusao)                        AS created_at
             FROM importacao
             JOIN layout_empresa ON layout_empresa.pk = fk_layoutempresa
             WHERE fk_layout <> 0

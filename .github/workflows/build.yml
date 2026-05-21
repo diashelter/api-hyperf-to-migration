@@ -1,6 +1,7 @@
 name: Build Docker
-
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
 
 jobs:
   build:
@@ -8,5 +9,24 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Build
-        run: cp -rf .github/workflows/Dockerfile . && docker build -t hyperf .
+
+      - name: login to docker registry
+        uses: docker/login-action@v3
+        with:
+          username: guilhermemrt
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create .env
+        run: |
+          cat <<EOF > .env.production
+            ${{ secrets.ENV_PROD_TEXT }}
+          EOF
+      - name: build and push docker image to registry
+        uses: docker/build-push-action@v5
+        with:
+          file: .github/workflows/Dockerfile
+          context: .
+          push: true
+          tags: guilhermemrt/conciliadorcontabil-migrator:testing
+          cache-from: # Set to an empty value to disable cache import
+          cache-to: # You may also want to disable cache export 

@@ -24,12 +24,12 @@ return [
         'prefix' => env('DB_PREFIX', ''),
         'schema' => 'public',
         'pool' => [
-            'min_connections' => (int) env('DB_POOL_MIN', 4),
-            'max_connections' => (int) env('DB_POOL_MAX', 40),
+            'min_connections' => (int) env('DB_POOL_MIN', 8),
+            'max_connections' => (int) env('DB_POOL_MAX', 64),
             'connect_timeout' => 10.0,
             'wait_timeout' => 3.0,
             'heartbeat' => -1,
-            'max_idle_time' => (float) env('DB_MAX_IDLE_TIME', 60),
+            'max_idle_time' => (float) env('DB_MAX_IDLE_TIME', 180),
         ],
         'commands' => [
             'gen:model' => [
@@ -51,12 +51,12 @@ return [
         'prefix' => '',
         'schema' => 'public',
         'pool' => [
-            'min_connections' => (int) env('DB_WEB_POOL_MIN', 5),
-            'max_connections' => (int) env('DB_WEB_POOL_MAX', 30),
+            'min_connections' => (int) env('DB_WEB_POOL_MIN', 8),
+            'max_connections' => (int) env('DB_WEB_POOL_MAX', 64),
             'connect_timeout' => 10.0,
             'wait_timeout' => 3.0,
             'heartbeat' => -1,
-            'max_idle_time' => (float) env('DB_WEB_MAX_IDLE_TIME', 60),
+            'max_idle_time' => (float) env('DB_WEB_MAX_IDLE_TIME', 180),
         ],
     ],
 
@@ -71,12 +71,12 @@ return [
         'prefix' => '',
         'schema' => 'public',
         'pool' => [
-            'min_connections' => (int) env('DB_LEGACY_POOL_MIN', 5),
-            'max_connections' => (int) env('DB_LEGACY_POOL_MAX', 30),
+            'min_connections' => (int) env('DB_LEGACY_POOL_MIN', 1),
+            'max_connections' => (int) env('DB_LEGACY_POOL_MAX', 8),
             'connect_timeout' => 10.0,
             'wait_timeout' => 3.0,
             'heartbeat' => -1,
-            'max_idle_time' => (float) env('DB_LEGACY_MAX_IDLE_TIME', 60),
+            'max_idle_time' => (float) env('DB_LEGACY_MAX_IDLE_TIME', 180),
         ],
     ],
 ];

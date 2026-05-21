@@ -44,13 +44,28 @@ class PeopleSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
-            SELECT
-                id                      AS legacy_id,
-                nomerazao               AS corporate_name,
-                cpfcnpj                 AS cpf_cnpj,
-                CURRENT_DATABASE()      AS legacy_contract_id
+            SELECT DISTINCT ON ( REGEXP_REPLACE(cpfcnpj, '[^0-9]', '', 'g')  )
+                    pessoas.id AS legacy_id,
+                    REGEXP_REPLACE(pessoas.cpfcnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
+                        pessoas.nomerazao AS corporate_name,
+                    CURRENT_DATABASE() AS legacy_contract_id
             FROM pessoas
+            WHERE cpfcnpj IS NOT null
+            UNION ALL
+            SELECT 
+                pessoas.id AS legacy_id,
+                pessoas.cpfcnpj AS cpf_cnpj,
+                    pessoas.nomerazao AS corporate_name,
+                CURRENT_DATABASE() AS legacy_contract_id
+            FROM pessoas
+            WHERE cpfcnpj IS NULL
+            ORDER BY 3
         SQL;
+    }
+
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM pessoas';
     }
 
     public function validationRules(): array

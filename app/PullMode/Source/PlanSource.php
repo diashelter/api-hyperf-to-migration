@@ -52,6 +52,11 @@ class PlanSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM pcontasconc';
+    }
+
     public function validationRules(): array
     {
         return [

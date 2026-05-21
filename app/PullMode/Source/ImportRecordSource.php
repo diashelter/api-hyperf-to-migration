@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace App\PullMode\Source;
 
+use Hyperf\DbConnection\Db;
+
 /**
  * Source legada → `import_records`. FKs: imports, import_sessions.
  *
@@ -37,6 +39,11 @@ class ImportRecordSource extends AbstractLegacySource
         return 5000;
     }
 
+    public function paginationKey(): string
+    {
+        return 'pagination_cursor';
+    }
+
     public function idStrategy(): string
     {
         return 'uuid7';
@@ -52,12 +59,29 @@ class ImportRecordSource extends AbstractLegacySource
         return false;
     }
 
+    public function useCopy(): bool
+    {
+        return $this->copyEnabled(true);
+    }
+
     public function fkMap(): array
     {
         return [
             'legacy_import_id' => 'imports',
             'legacy_import_session_id' => 'import_sessions',
+            'legacy_id_rule' => 'rules',
         ];
+    }
+
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM importacao
+            JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
+            WHERE importacao.fk_layout <> 0
+            AND importacao.inclusao > NOW() - INTERVAL '60 days'
+        SQL;
     }
 
     public function sql(): string
@@ -66,15 +90,19 @@ class ImportRecordSource extends AbstractLegacySource
             SELECT
                 importacao.uuid                                    AS legacy_id,
                 importacao.uuid                                    AS id,
+                importacao.fk_layoutempresa || '|' || importacao.uuid AS pagination_cursor,
                 'IMP-' || importacao.fk_layoutempresa              AS legacy_import_id,
                 'IS-' || importacao.fk_layoutempresa               AS legacy_import_session_id,
-                importacao.data                                    AS date,
-                COALESCE(importacao.historico_novo, importacao.historico) AS history,
+                importacao.fk_regra                                AS legacy_id_rule,
+                COALESCE("data", '1976-01-01')                   AS date,
+                importacao.historico                               AS history,
                 CASE
                     WHEN ABS(importacao.valor) < 10000000000000 THEN importacao.valor
-                    ELSE NULL
+                    ELSE 9999999999999
                 END                                                AS value,
-                importacao.cd                                      AS debit_credit,
+                CASE cd
+                    WHEN 'C' THEN 'C'
+                    ELSE 'D' END                                   AS debit_credit,
                 importacao.numdocumento                            AS num_doc,
                 importacao.fornecedor                              AS client_supplier,
                 importacao.banco                                   AS bank,
@@ -84,7 +112,7 @@ class ImportRecordSource extends AbstractLegacySource
                 importacao.con_idcredito                           AS credit_account,
                 importacao.complemento                             AS complement,
                 importacao.datavencimento                          AS due_date,
-                importacao.parcela                                 AS parcel,
+                LEFT(importacao.parcela, 25)                       AS parcel,
                 importacao.con_idhistorico                         AS history_code,
                 importacao.historicoexp                            AS accounting_history,
                 importacao.infadicional                            AS additional_information,
@@ -107,23 +135,52 @@ class ImportRecordSource extends AbstractLegacySource
                     WHEN importacao.fk_conciliacao IS NOT NULL THEN 1
                     ELSE 0
                 END                                     AS is_conciliated,
+                        CASE aut
+                WHEN 'M' THEN TRUE ELSE FALSE END AS is_manual, 
                 CASE importacao.situacao_confronto
                     WHEN 'CO' THEN 'Y'
                     WHEN 'NC' THEN 'N'
                     WHEN 'AF' THEN 'F'
                     ELSE NULL
-                END                                     AS conciliation_status
+                END                                     AS conciliation_status,
+                ROW_NUMBER() OVER (
+                    PARTITION BY fk_layoutempresa
+                    ORDER BY uuid
+                ) AS order_number
             FROM importacao
             JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
             WHERE importacao.fk_layout <> 0
             AND importacao.inclusao > NOW() - INTERVAL '60 days'
-              AND importacao.uuid > COALESCE(
-                  CAST(NULLIF(:last_id, '') AS UUID),
-                  '00000000-0000-0000-0000-000000000000'::UUID
+              AND (importacao.fk_layoutempresa, importacao.uuid) > (
+                  CAST(:last_layoutempresa AS BIGINT),
+                  CAST(:last_uuid AS UUID)
               )
-            ORDER BY importacao.uuid ASC
+            ORDER BY importacao.fk_layoutempresa ASC, importacao.uuid ASC
             LIMIT :limit
         SQL;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function paginate(string $connection, ?string $lastId, int $limit): array
+    {
+        [$lastLayoutEmpresa, $lastUuid] = $this->parsePaginationCursor($lastId);
+
+        $rows = Db::connection($connection)->select($this->sql(), [
+            'last_layoutempresa' => $lastLayoutEmpresa,
+            'last_uuid' => $lastUuid,
+            'limit' => $limit,
+        ]);
+
+        return array_map(static fn ($r) => (array) $r, $rows);
+    }
+
+    public function transformRow(array $row, string $contractId): array
+    {
+        unset($row['pagination_cursor']);
+
+        return $row;
     }
 
     public function validationRules(): array
@@ -134,5 +191,31 @@ class ImportRecordSource extends AbstractLegacySource
             'value' => 'nullable|numeric',
             'debit_credit' => 'nullable|in:D,C',
         ];
+    }
+
+    /**
+     * @return array{0: int, 1: string}
+     */
+    private function parsePaginationCursor(?string $lastId): array
+    {
+        $initial = [0, '00000000-0000-0000-0000-000000000000'];
+
+        if ($lastId === null || trim($lastId) === '') {
+            return $initial;
+        }
+
+        $parts = explode('|', $lastId, 2);
+        if (count($parts) !== 2) {
+            return $initial;
+        }
+
+        $layoutEmpresa = filter_var($parts[0], FILTER_VALIDATE_INT);
+        $uuid = trim($parts[1]);
+
+        if ($layoutEmpresa === false || $layoutEmpresa < 0 || $uuid === '') {
+            return $initial;
+        }
+
+        return [$layoutEmpresa, $uuid];
     }
 }

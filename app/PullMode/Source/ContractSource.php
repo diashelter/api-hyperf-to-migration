@@ -58,7 +58,7 @@ class ContractSource extends AbstractLegacySource
         return <<<'SQL'
             SELECT
                 CURRENT_DATABASE()  AS legacy_id,
-                cnpj                AS cpf_cnpj,
+                REGEXP_REPLACE(cnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
                 razaosocial         AS corporate_name,
                 endereco            AS street,
                 numero              AS number,
@@ -69,7 +69,7 @@ class ContractSource extends AbstractLegacySource
                 COALESCE(NULLIF(fantasia, ''), razaosocial) AS name,
                 email               AS email,
                 'company'           AS contractor_type,
-                1000                AS company_count,
+                0                   AS company_count,
                 CASE ativo
                     WHEN 'F' THEN 'SUSPENSO'
                     ELSE 'ATIVO'
@@ -83,6 +83,11 @@ class ContractSource extends AbstractLegacySource
             WHERE pk <> 0
             ORDER BY pk
         SQL;
+    }
+
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM contrato WHERE pk <> 0';
     }
 
     /**
@@ -103,8 +108,11 @@ class ContractSource extends AbstractLegacySource
         return array_map(static fn ($r) => (array) $r, $rows);
     }
 
-    public function transformRow(array $row, string $_contractId): array
+    public function transformRow(array $row, string $contractId): array
     {
+        $row['legacy_id'] = $contractId;
+        $row['legacy_database_id'] = $contractId;
+
         $legacyStatus = $row['legacy_status_contract'] ?? null;
         unset($row['legacy_status_contract']);
 

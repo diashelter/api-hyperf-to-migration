@@ -1,0 +1,79 @@
+services:
+  migrator:
+    container_name: conciliador-migrator
+    image: guilhermemrt/conciliadorcontabil-migrator:testing
+    volumes:
+      - migrator_runtime_data:/opt/www/runtime
+    ports:
+      - "9500:9500"
+      - "9501:9501"
+    environment:
+      - APP_ENV=dev
+      - SCAN_CACHEABLE=false
+    depends_on:
+      - migrator-postgres
+      - redis
+    networks:
+      - conciliador-net
+      # - network_public
+      - app-network
+
+  migrator-worker:
+    container_name: conciliador-migrator-worker
+    image: guilhermemrt/conciliadorcontabil-migrator:testing
+    volumes:
+      - migrator_runtime_data:/opt/www/runtime
+    environment:
+      - APP_ENV=dev
+      - SCAN_CACHEABLE=false
+    depends_on:
+      - migrator
+      - migrator-postgres
+      - redis
+    networks:
+      - conciliador-net
+      # - network_public
+      - app-network
+    # Mesma imagem da API; o consumer da fila é forkado via `processes` em
+    # config/autoload/async_queue.php. Permite escalar horizontalmente
+    # com `docker compose up -d --scale migrator-worker=N`.
+
+  migrator-postgres:
+    container_name: conciliador-migrator-postgres
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-conciliador}
+      POSTGRES_USER: ${DB_USERNAME:-conciliador}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-conciliador}
+    volumes:
+      - migrator_postgres_data:/var/lib/postgresql/data
+    networks:
+      - conciliador-net
+
+  redis:
+    container_name: conciliador-migrator-redis
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - migrator_redis_data:/data
+    networks:
+      - conciliador-net
+
+volumes:
+  migrator_postgres_data:
+  migrator_redis_data:
+  migrator_runtime_data:
+
+networks:
+  conciliador-net:
+    name: conciliador-net
+  # network_public:
+    # name: network_public
+    # external: true
+  app-network:
+    name: conciliadorcontabil-dev_app-network
+    external: true

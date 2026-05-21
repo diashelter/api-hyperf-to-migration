@@ -43,12 +43,17 @@ class ContractUserSource extends AbstractLegacySource
     public function idStrategy(): string
     {
         // Pivot não tem id próprio.
-        return 'uuid4';
+        return 'uuid7';
     }
 
     public function normalizeStrings(): bool
     {
         return false;
+    }
+
+    public function countSql(): ?string
+    {
+        return "SELECT COUNT(*) AS count FROM usuarios WHERE email <> 'suporte@integradorcontabil.net.br'";
     }
 
     public function specialHandler(): ?string
@@ -58,7 +63,7 @@ class ContractUserSource extends AbstractLegacySource
 
     /**
      * Pivot idempotente: em retries ou novos jobs, carregar todos os vinculos e
-     * deixar o insertOrIgnore() evitar duplicidade.
+     * deixar o handler especial filtrar vinculos ja existentes antes do insert.
      *
      * @return array<int, array<string, mixed>>
      */

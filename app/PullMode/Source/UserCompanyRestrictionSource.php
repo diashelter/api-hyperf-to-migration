@@ -15,7 +15,8 @@ namespace App\PullMode\Source;
 /**
  * Source legada → `user_company_restrictions`. FKs: users, companies.
  *
- * TODO: ajustar nome da tabela legada e aliases das colunas.
+ * A tabela de destino é uma relação por chave composta, sem `id` e sem
+ * timestamps; por isso usa handler especial no EntityMigrator.
  */
 class UserCompanyRestrictionSource extends AbstractLegacySource
 {
@@ -34,12 +35,22 @@ class UserCompanyRestrictionSource extends AbstractLegacySource
         return 2000;
     }
 
+    public function specialHandler(): ?string
+    {
+        return 'user_company_restrictions_pivot';
+    }
+
     public function fkMap(): array
     {
         return [
             'legacy_user_id' => 'users',
             'legacy_company_id' => 'companies',
         ];
+    }
+
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM usuario_empresas';
     }
 
     public function sql(): string

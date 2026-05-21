@@ -12,6 +12,10 @@ declare(strict_types=1);
 
 namespace App\PullMode\Source;
 
+use App\Service\IdMappingService;
+use App\Service\LookupCacheService;
+use Hyperf\Di\Annotation\Inject;
+
 /**
  * Source legada → `layouts`. Auto-referência via `reference_layout`.
  *
@@ -19,6 +23,13 @@ namespace App\PullMode\Source;
  */
 class LayoutSource extends AbstractLegacySource
 {
+    
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
+
+    #[Inject]
+    protected IdMappingService $idMappingService;
+    
     public function entity(): string
     {
         return 'layouts';
@@ -35,6 +46,23 @@ class LayoutSource extends AbstractLegacySource
             'legacy_contract_id' => 'contracts',
             'reference_layout' => 'layouts',
         ];
+    }
+
+     public function transformRow(array $row, string $_contractId): array
+    {
+
+        if (isset($row['code']) && ($row['code'] < 1000 || $row['code'] > 5000)) {
+            $row['layouts_admin_id'] = $this->lookupCacheService->resolve('layouts_admin', $row['code']);
+        }
+
+        if (! empty($row['reference_layout'])) {
+            $row['reference_layout'] = $this->idMappingService->resolve('layouts', $row['reference_layout'], $_contractId);
+        }
+
+        if (isset($row['day_to_add_when_import']) && $row['day_to_add_when_import'] > 999) {
+            $row['day_to_add_when_import'] = 999;
+        }
+        return $row;
     }
 
     public function sql(): string
@@ -155,6 +183,17 @@ class LayoutSource extends AbstractLegacySource
             WHERE visivel = 1
               AND tipo = 'IMP'
             ORDER BY layout.pk
+        SQL;
+    }
+
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(DISTINCT layout.pk) AS count
+            FROM public.layout
+            JOIN layout_empresa ON layout.pk = layout_empresa.fk_layoutimp
+            WHERE visivel = 1
+              AND tipo = 'IMP'
         SQL;
     }
 

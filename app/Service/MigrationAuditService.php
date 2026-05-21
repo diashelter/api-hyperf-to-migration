@@ -43,7 +43,7 @@ class MigrationAuditService
 
         try {
             MigrationAuditLog::query()->create([
-                'id' => Uuid::uuid4()->toString(),
+                'id' => Uuid::uuid7()->toString(),
                 'request_id' => $requestId,
                 'contract_id' => $contractId,
                 'entity' => $entity,
@@ -118,7 +118,7 @@ class MigrationAuditService
 
         foreach ($recordLogs as $recordLog) {
             $payload[] = [
-                'id' => Uuid::uuid4()->toString(),
+                'id' => Uuid::uuid7()->toString(),
                 'request_id' => $requestId,
                 'contract_id' => $contractId,
                 'entity' => $entity,

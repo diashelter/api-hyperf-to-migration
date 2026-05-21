@@ -48,7 +48,15 @@ MIGRATION_API_KEY                                                  # auth da API
 
 ```env
 MIGRATION_CHUNK_SIZE=1000        # registros por chunk de insert
-MIGRATION_MAX_COROUTINES=5       # paralelismo Swoole
+MIGRATION_COPY_CHUNK_SIZE=5000   # registros por chunk COPY/bulk fallback
+MIGRATION_COPY_COROUTINES=2      # paralelismo do caminho de alto volume
+MIGRATION_COPY_DRIVER=native     # native usa ext pgsql; fallback usa bulk insert
+MIGRATION_BULK_INSERT_PARAMETER_LIMIT=60000
+MIGRATION_MAX_COROUTINES=16      # paralelismo Swoole para insertBatch
+MIGRATION_MAPPING_CHUNK_SIZE=1000
+MIGRATION_MAPPING_COROUTINES=4
+MIGRATION_ID_MAPPING_CACHE_SKIP=rules,import_records,confrontation_records
+MIGRATION_USE_COPY=true          # caminho de alto volume nas sources maiores
 MIGRATION_RATE_LIMIT=60          # req/min padrão
 MIGRATION_BULK_RATE_LIMIT=30     # req/min endpoints de alto volume
 ```

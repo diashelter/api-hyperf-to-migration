@@ -44,7 +44,7 @@ final class IdMappingServiceTest extends UnitTestCase
                 ],
                 Mockery::on(function (array $payload): bool {
                     return is_string($payload['id'] ?? null)
-                        && preg_match(self::UUID_PATTERN, $payload['id']) === 1
+                        && preg_match(self::UUID_V7_PATTERN, $payload['id']) === 1
                         && $payload['new_id'] === 'new-1'
                         && $payload['migration_batch_id'] === 'batch-1';
                 })
@@ -56,6 +56,9 @@ final class IdMappingServiceTest extends UnitTestCase
 
     public function testStoreBatchUpsertsInChunksOfFiveHundredRecords(): void
     {
+        $this->setEnvValue('MIGRATION_MAPPING_CHUNK_SIZE', '500');
+        $this->setEnvValue('MIGRATION_MAPPING_COROUTINES', '1');
+
         $db = Mockery::mock('alias:Hyperf\DbConnection\Db');
         $builder = Mockery::mock();
         $capturedChunks = [];
@@ -90,7 +93,7 @@ final class IdMappingServiceTest extends UnitTestCase
         $this->assertSame('contract-1', $capturedChunks[0][0]['contract_id']);
         $this->assertSame('batch-1', $capturedChunks[0][0]['migration_batch_id']);
         $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $capturedChunks[0][0]['created_at']);
-        $this->assertMatchesRegularExpression(self::UUID_PATTERN, $capturedChunks[0][0]['id']);
+        $this->assertMatchesRegularExpression(self::UUID_V7_PATTERN, $capturedChunks[0][0]['id']);
         $this->assertSame('legacy-501', $capturedChunks[1][0]['legacy_id']);
     }
 

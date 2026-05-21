@@ -45,6 +45,11 @@ class UserSource extends AbstractLegacySource
         return false;
     }
 
+    public function countSql(): ?string
+    {
+        return "SELECT COUNT(*) AS count FROM usuarios WHERE email <> 'suporte@integradorcontabil.net.br'";
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

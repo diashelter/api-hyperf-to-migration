@@ -161,7 +161,7 @@ class MigrationJobController
                         new OA\Property(
                             property: 'entity_progress',
                             type: 'object',
-                            description: 'Mapa por entidade com progresso e erros.'
+                            description: 'Mapa por entidade com progresso e erros. Cada entidade pode conter `target` (total de registros esperados no legado, ou null se a Source não implementar countSql).'
                         ),
                         new OA\Property(property: 'error_summary', type: 'object', nullable: true),
                         new OA\Property(property: 'started_at', type: 'string', format: 'date-time', nullable: true),

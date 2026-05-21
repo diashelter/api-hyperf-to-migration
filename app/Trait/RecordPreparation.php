@@ -14,6 +14,7 @@ namespace App\Trait;
 
 use App\Service\IdMappingService;
 use Ramsey\Uuid\Uuid;
+use RuntimeException;
 
 /**
  * Lógica de preparação de registros (normalize/hash/UUID/FK resolution)
@@ -97,11 +98,16 @@ trait RecordPreparation
             }
         }
 
+        $deduped = [];
         foreach ($legacyIdsByEntity as $entity => $legacyIds) {
             if (empty($legacyIds)) {
                 continue;
             }
-            $idMappingService->prewarm($entity, array_values(array_unique($legacyIds)), $contractId);
+            $deduped[$entity] = array_values(array_unique($legacyIds));
+        }
+
+        if (! empty($deduped)) {
+            $idMappingService->prewarmMulti($deduped, $contractId);
         }
     }
 
@@ -145,16 +151,32 @@ trait RecordPreparation
         string $contractId
     ): array {
         if (! empty($record['legacy_contract_id'])) {
-            $record['contract_id'] = $idMappingService->resolve('contracts', $record['legacy_contract_id'], $contractId)
-                ?? $record['contract_id'] ?? null;
+            $legacyContractId = (string) $record['legacy_contract_id'];
+            $resolved = $idMappingService->resolve('contracts', $legacyContractId, $contractId);
+
+            if ($resolved === null && empty($record['contract_id'])) {
+                throw new RuntimeException(sprintf(
+                    "Contract mapping not found for legacy_id '%s' in migration scope '%s'.",
+                    $legacyContractId,
+                    $contractId
+                ));
+            }
+
+            $record['contract_id'] = $resolved ?? $record['contract_id'];
             unset($record['legacy_contract_id']);
         }
 
         if (empty($record['contract_id'])) {
             $resolved = $idMappingService->resolve('contracts', $contractId, $contractId);
-            if ($resolved !== null) {
-                $record['contract_id'] = $resolved;
+
+            if ($resolved === null) {
+                throw new RuntimeException(sprintf(
+                    "Contract mapping not found for migration scope '%s'.",
+                    $contractId
+                ));
             }
+
+            $record['contract_id'] = $resolved;
         }
 
         return $record;
@@ -198,7 +220,7 @@ trait RecordPreparation
             }
 
             $record['created_at'] = $record['created_at'] ?? $now;
-            $record['updated_at'] = $record['updated_at'] ?? $now;
+            $record['updated_at'] = $record['updated_at'] ?? null;
 
             $record = $resolveForeignKeysFn($record, $contractId);
 
@@ -249,9 +271,7 @@ trait RecordPreparation
 
     protected function recordPrepGenerateId(string $strategy): string
     {
-        return $strategy === 'uuid7'
-            ? Uuid::uuid7()->toString()
-            : Uuid::uuid4()->toString();
+        return Uuid::uuid7()->toString();
     }
 
     /**

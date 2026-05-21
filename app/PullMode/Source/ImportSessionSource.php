@@ -42,6 +42,20 @@ class ImportSessionSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count FROM (
+                SELECT 1
+                FROM importacao
+                JOIN layout_empresa ON layout_empresa.pk = importacao.fk_layoutempresa
+                WHERE importacao.fk_layout <> 0
+                GROUP BY importacao.fk_layoutempresa, importacao.fk_layout
+                HAVING MAX(importacao.inclusao) > NOW() - INTERVAL '60 days'
+            ) AS sub
+        SQL;
+    }
+
     public function sql(): string
     {
         return <<<'SQL'

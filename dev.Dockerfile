@@ -14,6 +14,7 @@ RUN addgroup -g ${GID} application && \
     adduser -S -D -u ${UID} -G application -s /bin/ash -h /home/application application
 
 RUN set -ex \
+    && apk add --no-cache php84-pgsql \
     && php -v \
     && php -m \
     && php --ri swoole \

@@ -9,6 +9,7 @@ ENV TIMEZONE=${timezone} \
     SCAN_CACHEABLE=(true)
 
 RUN set -ex \
+    && apk add --no-cache php84-pgsql \
     && php -v \
     && php -m \
     && php --ri swoole \

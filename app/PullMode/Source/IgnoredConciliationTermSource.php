@@ -31,6 +31,11 @@ class IgnoredConciliationTermSource extends AbstractLegacySource
         ];
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM layout_despresados WHERE fk_layout <> 0 AND historico IS NOT NULL';
+    }
+
     public function sql(): string
     {
         return <<<'SQL'
@@ -45,6 +50,7 @@ class IgnoredConciliationTermSource extends AbstractLegacySource
                 alteracao                                               AS updated_at
             FROM layout_despresados
             WHERE fk_layout <> 0
+                and (historico IS NOT NULL OR fornecedor IS NOT NULL)
             ORDER BY inclusao
         SQL;
     }

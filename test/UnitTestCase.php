@@ -23,6 +23,8 @@ abstract class UnitTestCase extends TestCase
 {
     protected const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
 
+    protected const UUID_V7_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+
     /** @var array<string, array{exists: bool, value: ?string}> */
     private array $environmentBackup = [];
 

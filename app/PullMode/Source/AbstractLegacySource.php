@@ -13,6 +13,10 @@ declare(strict_types=1);
 namespace App\PullMode\Source;
 
 use Hyperf\DbConnection\Db;
+use Hyperf\Logger\LoggerFactory;
+use Hyperf\Context\ApplicationContext;
+
+use function Hyperf\Support\env;
 
 /**
  * Contrato base para "fontes legadas". Cada subclasse encapsula:
@@ -92,13 +96,11 @@ abstract class AbstractLegacySource
     }
 
     /**
-     * Estratégia de geração de id no destino. "uuid7" é recomendado para
-     * tabelas de alto volume com índice ordenado (import_records,
-     * confrontation_records).
+     * Estratégia de geração de id no destino.
      */
     public function idStrategy(): string
     {
-        return 'uuid4';
+        return 'uuid7';
     }
 
     /**
@@ -107,6 +109,34 @@ abstract class AbstractLegacySource
     public function normalizeStrings(): bool
     {
         return true;
+    }
+
+    /**
+     * SQL de contagem para estimar o total de registros a migrar.
+     * Retornar null desabilita o cálculo de `target` no entity_progress.
+     * Deve retornar uma coluna chamada `count`.
+     *
+     * Exemplo: "SELECT COUNT(*) AS count FROM usuarios"
+     */
+    public function countSql(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * Executa countSql() e retorna o total, ou null se não implementado.
+     */
+    public function count(string $connection): ?int
+    {
+        $sql = $this->countSql();
+
+        if ($sql === null) {
+            return null;
+        }
+
+        $result = Db::connection($connection)->selectOne($sql);
+
+        return $result ? (int) $result->count : null;
     }
 
     /**
@@ -133,6 +163,36 @@ abstract class AbstractLegacySource
     public function hasContractId(): bool
     {
         return true;
+    }
+
+    /**
+     * Se true, o EntityMigrator usa `ParallelInsertService::copyBatch()`
+     * ao invés de `insertBatch()`. O serviço usa COPY nativo quando a extensão
+     * `pgsql` existe e fallback bulk insert quando ela ainda não está carregada.
+     * Recomendado apenas para tabelas de altíssimo volume (import_records, confrontation_records, rules).
+     * Subclasses devem ler a flag `MIGRATION_USE_COPY` para permitir rollback fácil.
+     */
+    public function useCopy(): bool
+    {
+        return false;
+    }
+
+    protected function copyEnabled(bool $default = false): bool
+    {
+        return $this->envBool('MIGRATION_USE_COPY', $default);
+    }
+
+    protected function envBool(string $key, bool $default = false): bool
+    {
+        $value = env($key, $default);
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        $parsed = filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+
+        return $parsed ?? $default;
     }
 
     /**
@@ -174,6 +234,17 @@ abstract class AbstractLegacySource
         } else {
             // Queries sem keyset pagination carregam tudo de uma vez.
             // Na retomada (lastId preenchido), retorna vazio — já processado.
+            try {
+                $logger = ApplicationContext::getContainer()
+                    ->get(LoggerFactory::class)
+                    ->get('migration-source');
+                $logger->warning('Source sem placeholders keyset (:last_id/:limit)', [
+                    'entity' => $this->entity(),
+                    'class' => static::class,
+                ]);
+            } catch (\Throwable) {
+                // logger opcional; não bloqueia paginação
+            }
             if ($lastId !== null) {
                 return [];
             }

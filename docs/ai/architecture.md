@@ -218,37 +218,79 @@ Cada entidade do pull-mode é definida por uma classe em `app/PullMode/Source`. 
 - se a tabela possui `contract_id` (`hasContractId()`);
 - handler especial, quando o fluxo padrão não serve (`specialHandler()`).
 
-Pipeline padrão em `EntityMigrator`:
+Pipeline padrão em `EntityMigrator` (producer/consumer overlap via `Swoole\Coroutine\Channel`):
 
 ```text
 para cada Source ativa:
   1. recuperar progresso salvo em migration_jobs.entity_progress
   2. usar last_id como cursor de retomada
-  3. carregar linhas do legado via Source::paginate()
-  4. aplicar Source::transformRow()
-  5. filtrar duplicados por migration_id_mappings
-  6. pré-aquecer cache de FKs com IdMappingService::prewarm()
-  7. preparar registros:
-     - normalizar strings
-     - remover legacy_id
-     - gerar UUID v4/v7 quando necessário
-     - bcrypt em password quando existir
-     - preencher created_at/updated_at
-     - resolver legacy_*_id para *_id
-  8. inserir em lote no conciliador_web via ParallelInsertService::insertBatch()
-  9. gravar mappings da entidade em migration_id_mappings
- 10. atualizar entity_progress e totals do job
+  3. abrir Channel(2) e disparar 2 corrotinas em paralelo:
+
+     (producer)                           (consumer)
+     ─ paginate via Source::paginate      ─ pop(channel)
+     ─ aplicar Source::transformRow       ─ filterDuplicates (resolveMany)
+     ─ push(channel)                      ─ restoreRecordsWithMissingTargets
+                                          ─ reuseExistingUsersByEmail (users)
+                                          ─ prewarmMulti (1 query batch p/ N FKs)
+                                          ─ recordPrepPrepare
+                                          ─ insertBatch ou copyBatch (Source::useCopy)
+                                          ─ storeBatch (paralelo, MIGRATION_MAPPING_COROUTINES)
+                                          ─ updateEntityProgress
+  4. aguardar ambas corrotinas (Parallel::wait)
+  5. atualizar status e totals do job
 ```
+
+Ganho: enquanto o consumer faz `INSERT/COPY` no destino + `storeBatch` no schema do migrador, o producer já está lendo a próxima página do legado. O `Channel(2)` gera backpressure natural.
 
 ### Paginação
 
 `AbstractLegacySource::paginate()` detecta se o SQL contém `:last_id` e `:limit`.
 
 - Se contém, usa keyset pagination.
-- Se não contém, carrega tudo de uma vez na primeira execução.
+- Se não contém, carrega tudo de uma vez na primeira execução e loga warning em `migration-source` (canal padrão).
 - Em retomadas, quando `last_id` já existe, queries sem keyset retornam vazio.
 
-Isso significa que `chunkSize()` só tem efeito real nas Sources cujo SQL usa `:last_id` e `:limit`.
+Isso significa que `chunkSize()` só tem efeito real nas Sources cujo SQL usa `:last_id` e `:limit`. Toda Source nova **deve** implementar keyset (ver `RuleSource` ou `ImportRecordSource` como referência).
+
+### COPY FROM STDIN para alto volume
+
+Sources de alto volume sobrescrevem `useCopy(): bool` e usam `ParallelInsertService::copyBatch()` quando `MIGRATION_USE_COPY=true`. O caminho preferencial usa `COPY FROM STDIN` pela extensão nativa `pgsql` (`MIGRATION_COPY_DRIVER=native`), evitando `PDO::pgsqlCopyFromArray`/`pgsqlCopyFromFile`, que travaram no ambiente Docker atual em `ClientRead`.
+
+Se a imagem ainda não tiver `php84-pgsql` carregado, `copyBatch()` não tenta o COPY via PDO: ele faz fallback para bulk insert multi-row, com chunks calibrados por `MIGRATION_BULK_INSERT_PARAMETER_LIMIT` e paralelismo por `MIGRATION_COPY_COROUTINES`. Isso mantém a migração andando sem o gargalo/risco de deadlock do PDO, embora sem o ganho máximo do COPY real.
+
+Restrições do caminho COPY:
+
+- `COPY FROM` respeita constraints e triggers do PostgreSQL, mas não retorna linhas; o pipeline já gera UUID e resolve FKs em PHP, então não precisamos de `RETURNING`.
+- Cada chunk roda de forma atômica; em falha, o chunk entra em `failed` e o caller não grava `migration_id_mappings` para ele.
+- Tipos: booleanos viram `t`/`f`, arrays/objects viram JSON; strings têm `\`, `\n`, `\r`, `\t` escapados.
+- Para ativar COPY real na imagem, `Dockerfile` e `dev.Dockerfile` instalam `php84-pgsql`; reconstrua os containers após alterar a imagem.
+
+Sources atualmente com `useCopy()` overridden: `ImportRecordSource`, `ConfrontationRecordSource`, `RuleSource`. Elas usam o caminho de alto volume por padrão; desligue com `MIGRATION_USE_COPY=false` se precisar voltar ao `insertBatch()` padrão.
+
+### Dimensionamento de pool e coroutines
+
+| Connection | min / max | Observação |
+|---|---|---|
+| `default` | 8 / 64 | Recebe escrita paralela de `storeBatch` (`MIGRATION_MAPPING_COROUTINES` chunks simultâneos) |
+| `conciliador_web` | 8 / 64 | Recebe `insertBatch` paralelo (`MIGRATION_MAX_COROUTINES`) ou `copyBatch` por `MIGRATION_COPY_CHUNK_SIZE`/`MIGRATION_COPY_COROUTINES` |
+| `legacy_database` | 4 / 32 | Leitura keyset sequencial; pool maior só ajuda em concorrência futura |
+
+Regra de ouro: `MIGRATION_MAX_COROUTINES + MIGRATION_MAPPING_COROUTINES + margem` deve caber em `max_connections` da connection respectiva quando uma Source usa `insertBatch`. Em `copyBatch` nativo, as conexões `pgsql` não usam o pool Hyperf, então considere `MIGRATION_COPY_COROUTINES + MIGRATION_MAPPING_COROUTINES + margem`. No fallback bulk insert, a escrita usa o pool `conciliador_web`.
+
+Variáveis relevantes:
+
+```env
+MIGRATION_CHUNK_SIZE=1000
+MIGRATION_COPY_CHUNK_SIZE=5000
+MIGRATION_COPY_COROUTINES=2
+MIGRATION_COPY_DRIVER=native       # native=ext pgsql; bulk_insert=sem COPY
+MIGRATION_BULK_INSERT_PARAMETER_LIMIT=60000
+MIGRATION_MAX_COROUTINES=16        # paralelismo de insertBatch por página
+MIGRATION_MAPPING_CHUNK_SIZE=1000
+MIGRATION_MAPPING_COROUTINES=4     # paralelismo de upsert em migration_id_mappings
+MIGRATION_ID_MAPPING_CACHE_SKIP=rules,import_records,confrontation_records
+MIGRATION_USE_COPY=true            # caminho de alto volume nos sources maiores
+```
 
 ### Validação
 
@@ -326,8 +368,13 @@ Fluxo:
 2. resolve `legacy_user_id` em `users`;
 3. resolve `legacy_contract_id` em `contracts`;
 4. resolve `legacy_role_id` (`owner` ou `user`) em `lookup_cache.roles`;
-5. insere em `contract_user` com `insertOrIgnore()`;
-6. não grava `migration_id_mappings`, porque pivot não tem ID próprio.
+5. filtra vínculos já existentes em `contract_user` por `(contract_id, user_id)`;
+6. insere os vínculos restantes com `insertOrIgnore()`;
+7. não grava `migration_id_mappings`, porque pivot não tem ID próprio.
+
+O filtro explícito evita duplicidade mesmo quando o destino não possui constraint
+única no pivot. Uma unique constraint no banco continua sendo a garantia mais
+forte contra jobs concorrentes.
 
 ### `user_permissions_delete`
 
@@ -464,8 +511,7 @@ O pipeline usa `RecordPreparation::recordPrepGenerateId()`:
 
 | Estratégia | Uso |
 |---|---|
-| `uuid4` | Padrão para a maioria das entidades |
-| `uuid7` | Disponível para Sources de alto volume, como `ImportRecordSource` e `ConfrontationRecordSource`, atualmente desligadas |
+| `uuid7` | Padrão para todos os UUIDs gerados pela aplicação |
 
 Se o registro já vier com `id`, o pipeline preserva esse valor.
 

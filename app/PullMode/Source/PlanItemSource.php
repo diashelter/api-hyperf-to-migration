@@ -64,6 +64,11 @@ class PlanItemSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return 'SELECT COUNT(*) AS count FROM pcontasconc_item';
+    }
+
     public function validationRules(): array
     {
         return [

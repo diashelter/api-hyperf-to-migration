@@ -66,6 +66,17 @@ class CompanyLayoutSource extends AbstractLegacySource
         SQL;
     }
 
+    public function countSql(): ?string
+    {
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM layout_empresa
+            JOIN layout ON layout.pk = layout_empresa.fk_layoutimp AND layout.visivel = 1
+            WHERE fk_empresa <> 0
+              AND fk_layoutimp <> 0
+        SQL;
+    }
+
     public function validationRules(): array
     {
         return [
