@@ -1,53 +1,42 @@
-# Default Dockerfile
-#
-# @link     https://www.hyperf.io
-# @document https://hyperf.wiki
-# @contact  group@hyperf.io
-# @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
-
+# Conciliador Migrator - Development Dockerfile
 FROM hyperf/hyperf:8.4-alpine-v3.21-swoole
-LABEL maintainer="Hyperf Developers <group@hyperf.io>" version="1.0" license="MIT" app.name="Hyperf"
+LABEL maintainer="DevCC Team" version="1.0" app.name="conciliador-migrator-dev"
 
-##
-# ---------- env settings ----------
-##
-# --build-arg timezone=Asia/Shanghai
-ARG timezone
+ARG timezone=America/Sao_Paulo
+ARG UID=1000
+ARG GID=1000
 
-ENV TIMEZONE=${timezone:-"Asia/Shanghai"} \
-    APP_ENV=prod \
+ENV TIMEZONE=${timezone} \
+    APP_ENV=dev \
     SCAN_CACHEABLE=(true)
 
-# update
+RUN addgroup -g ${GID} application && \
+    adduser -S -D -u ${UID} -G application -s /bin/ash -h /home/application application
+
 RUN set -ex \
-    # show php version and extensions
+    && apk add --no-cache php84-pgsql \
     && php -v \
     && php -m \
     && php --ri swoole \
-    #  ---------- some config ----------
     && cd /etc/php* \
-    # - config PHP
     && { \
         echo "upload_max_filesize=128M"; \
         echo "post_max_size=128M"; \
         echo "memory_limit=1G"; \
         echo "date.timezone=${TIMEZONE}"; \
     } | tee conf.d/99_overrides.ini \
-    # - config timezone
     && ln -sf /usr/share/zoneinfo/${TIMEZONE} /etc/localtime \
     && echo "${TIMEZONE}" > /etc/timezone \
-    # ---------- clear works ----------
-    && rm -rf /var/cache/apk/* /tmp/* /usr/share/man \
-    && echo -e "\033[42;37m Build Completed :).\033[0m\n"
+    && rm -rf /var/cache/apk/* /tmp/* /usr/share/man
+
+RUN chmod +x /usr/local/bin/composer
+
+# USER application
 
 WORKDIR /opt/www
 
-# Composer Cache
-# COPY ./composer.* /opt/www/
-# RUN composer install --no-dev --no-scripts
-
 COPY . /opt/www
-RUN print "\n" | composer install -o && php bin/hyperf.php
+RUN composer install && php bin/hyperf.php
 
 EXPOSE 9501
 

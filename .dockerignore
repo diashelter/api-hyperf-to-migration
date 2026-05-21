@@ -1,5 +1,8 @@
-**
 !app/
 !bin/
 !config/
 !composer.*
+runtime/
+composer.lock
+.env
+.env.prod
