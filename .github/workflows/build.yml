@@ -18,7 +18,7 @@ jobs:
 
       - name: Create .env
         run: |
-          cat <<EOF > .env
+          cat <<EOF > .env.production
             ${{ secrets.ENV_PROD_TEXT }}
           EOF
       - name: build and push docker image to registry

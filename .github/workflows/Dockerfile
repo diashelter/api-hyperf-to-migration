@@ -6,6 +6,9 @@ ARG timezone=America/Sao_Paulo
 ARG UID=1000
 ARG GID=1000
 
+RUN cp .env.production .env
+RUN sed -i'' -e 's/^APP_ENV=.*/APP_ENV=production/' -e 's/^APP_DEBUG=.*/APP_DEBUG=false/' .env
+
 ENV TIMEZONE=${timezone} \
     APP_ENV=prod \
     SCAN_CACHEABLE=(true)
