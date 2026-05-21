@@ -7,7 +7,7 @@ ARG UID=1000
 ARG GID=1000
 
 ENV TIMEZONE=${timezone} \
-    APP_ENV=dev \
+    APP_ENV=prod \
     SCAN_CACHEABLE=(true)
 
 RUN addgroup -g ${GID} application && \
