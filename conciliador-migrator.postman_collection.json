@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "conciliador-migrator-migration-jobs-only",
     "name": "Conciliador Migrator - Migration Jobs API",
-    "description": "Collection somente com endpoints do MigrationJobController.\n\nAutenticacao:\n- Header X-Api-Key: valor de MIGRATION_API_KEY\n\nFluxo recomendado:\n1) POST /api/v1/migration/database para criar o job\n2) GET /api/v1/migration/job/{jobId} para acompanhar um job\n3) GET /api/v1/migration/jobs para listar jobs recentes ou GET /api/v1/migration/jobs?legacy_db={{legacy_db}} para filtrar\n\nObservacoes:\n- legacy_db e usado como namespace interno da migracao; o UUID real de contrato e criado/mapeado na entidade contracts\n- Rate limit padrao: MIGRATION_RATE_LIMIT por minuto (default 60)\n- Erros comuns: 401 (api key), 422 (validacao/legado), 429 (rate limit)",
+    "description": "Collection somente com endpoints do MigrationJobController.\n\nAutenticacao:\n- Header X-Api-Key: valor de MIGRATION_API_KEY\n\nFluxo recomendado:\n1) GET /api/v1/migration/database/availability para validar se o legacy_db esta acessivel\n2) POST /api/v1/migration/database para criar o job\n3) GET /api/v1/migration/job/{jobId} para acompanhar um job\n4) GET /api/v1/migration/jobs para listar jobs recentes ou GET /api/v1/migration/jobs?legacy_db={{legacy_db}} para filtrar\n\nObservacoes:\n- legacy_db e usado como namespace interno da migracao; o UUID real de contrato e criado/mapeado na entidade contracts\n- Rate limit padrao: MIGRATION_RATE_LIMIT por minuto (default 60)\n- Erros comuns: 401 (api key), 422 (validacao/legado), 429 (rate limit)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -37,6 +37,39 @@
       "name": "Migration Jobs",
       "description": "Grupo de endpoints para disparar e monitorar jobs de migracao pull-mode.",
       "item": [
+        {
+          "name": "GET /api/v1/migration/database/availability",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/migration/database/availability?legacy_db={{legacy_db}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "migration",
+                "database",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "legacy_db",
+                  "value": "{{legacy_db}}"
+                }
+              ]
+            },
+            "description": "Consulta se o banco legado informado em `legacy_db` esta disponivel para migracao.\n\nHeaders obrigatorios:\n- X-Api-Key\n\nQuery params:\n- legacy_db (string, obrigatorio)\n\nSucesso:\n- 200 OK\n- Body disponivel: { legacy_db, available: true, message }\n- Body indisponivel: { legacy_db, available: false, message }\n\nErros comuns:\n- 401 Unauthorized\n- 422 Unprocessable Entity: legacy_db ausente/vazio\n- 429 Too Many Requests"
+          },
+          "response": []
+        },
         {
           "name": "POST /api/v1/migration/database",
           "request": {
