@@ -11,7 +11,7 @@ ARG GID=1000
 
 ENV TIMEZONE=${timezone} \
     APP_ENV=prod \
-    SCAN_CACHEABLE=(true)
+    SCAN_CACHEABLE=(false)
 
 RUN addgroup -g ${GID} application && \
     adduser -S -D -u ${UID} -G application -s /bin/ash -h /home/application application
