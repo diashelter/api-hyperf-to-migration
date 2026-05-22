@@ -109,6 +109,8 @@ class EntityMigrator
             $producerError = null;
             $consumerError = null;
             $cancelled = false;
+            $lastConsumerProgressAt = microtime(true);
+            $consumerCid = null;
 
             $parallel = new Parallel(2);
 
@@ -122,6 +124,8 @@ class EntityMigrator
                 $lastId,
                 $channel,
                 &$cancelled,
+                &$consumerCid,
+                &$lastConsumerProgressAt,
                 &$producerError
             ) {
                 $cursor = $lastId;
@@ -150,18 +154,10 @@ class EntityMigrator
                         $newCursor = isset($lastRow[$paginationKey]) ? (string) $lastRow[$paginationKey] : null;
                         $rowCount = count($rows);
 
-                        $pushed = $channel->push([
+                        $this->pushToChannel($channel, [
                             'transformed_batch' => $batch,
                             'last_id' => $newCursor,
-                        ], 5.0);
-
-                        if ($pushed === false) {
-                            if ($cancelled) {
-                                break;
-                            }
-
-                            throw new RuntimeException("Timed out while sending batch for entity '{$entity}' to the migration channel.");
-                        }
+                        ], $entity, $lastConsumerProgressAt, $cancelled, $consumerCid);
 
                         $cursor = $newCursor;
                         if ($rowCount < $chunkSize) {
@@ -172,7 +168,18 @@ class EntityMigrator
                     $producerError = $e;
                 } finally {
                     if (! $cancelled) {
-                        $channel->push(null);
+                        try {
+                            $this->pushToChannel(
+                                $channel,
+                                null,
+                                $entity,
+                                $lastConsumerProgressAt,
+                                $cancelled,
+                                $consumerCid
+                            );
+                        } catch (Throwable $e) {
+                            $producerError ??= $e;
+                        }
                     }
                 }
             });
@@ -191,10 +198,14 @@ class EntityMigrator
                 $channel,
                 $useCopy,
                 &$cancelled,
+                &$consumerCid,
+                &$lastConsumerProgressAt,
                 &$totals,
                 &$consumerError
             ) {
                 try {
+                    $consumerCid = Coroutine::getCid();
+
                     while (true) {
                         $msg = $channel->pop();
                         if ($msg === false || $msg === null) {
@@ -284,6 +295,7 @@ class EntityMigrator
                             'failed' => $totals['failed'],
                             'skipped' => $totals['skipped'],
                         ]);
+                        $lastConsumerProgressAt = microtime(true);
                     }
                 } catch (Throwable $e) {
                     $consumerError = $e;
@@ -317,6 +329,61 @@ class EntityMigrator
         $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
 
         return $totals;
+    }
+
+    /**
+     * Mantem backpressure do Channel sem deixar um consumer travado prender a
+     * entidade ate o timeout global do job.
+     */
+    private function pushToChannel(
+        Channel $channel,
+        mixed $message,
+        string $entity,
+        float &$lastConsumerProgressAt,
+        bool &$cancelled,
+        ?int &$consumerCid
+    ): void {
+        $stallTimeout = max(0, (int) env('MIGRATION_ENTITY_STALL_TIMEOUT', 900));
+
+        if ($stallTimeout === 0) {
+            if ($channel->push($message) === false && ! $cancelled) {
+                throw new RuntimeException("Failed to send data for entity '{$entity}' to the migration channel.");
+            }
+
+            return;
+        }
+
+        $waitSeconds = min(5.0, (float) $stallTimeout);
+
+        while (! $cancelled) {
+            if ($channel->push($message, $waitSeconds)) {
+                return;
+            }
+
+            if ($this->entityPipelineHasStalled($lastConsumerProgressAt, $stallTimeout)) {
+                $cancelled = true;
+                $channel->close();
+
+                if ($consumerCid !== null && $consumerCid > 0) {
+                    Coroutine::cancel($consumerCid);
+                }
+
+                throw new RuntimeException(sprintf(
+                    "Entity '%s' made no migration progress for %d seconds while waiting for the migration channel.",
+                    $entity,
+                    $stallTimeout
+                ));
+            }
+        }
+    }
+
+    private function entityPipelineHasStalled(float $lastConsumerProgressAt, int $stallTimeout, ?float $now = null): bool
+    {
+        if ($stallTimeout <= 0) {
+            return false;
+        }
+
+        return ($now ?? microtime(true)) - $lastConsumerProgressAt >= $stallTimeout;
     }
 
     /**

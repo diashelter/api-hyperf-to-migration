@@ -219,6 +219,16 @@ final class EntityMigratorTest extends UnitTestCase
         }
     }
 
+    public function testEntityPipelineStallRequiresConfiguredTimeWithoutProgress(): void
+    {
+        $method = new ReflectionMethod(EntityMigrator::class, 'entityPipelineHasStalled');
+        $migrator = new EntityMigrator();
+
+        $this->assertFalse($method->invoke($migrator, 100.0, 900, 999.99));
+        $this->assertTrue($method->invoke($migrator, 100.0, 900, 1000.0));
+        $this->assertFalse($method->invoke($migrator, 100.0, 0, 1000.0));
+    }
+
     /**
      * @param array<int, array<string, mixed>> $records
      * @return array{0: array<int, array<string, mixed>>, 1: int}

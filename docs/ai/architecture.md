@@ -240,7 +240,7 @@ para cada Source ativa:
   5. atualizar status e totals do job
 ```
 
-Ganho: enquanto o consumer faz `INSERT/COPY` no destino + `storeBatch` no schema do migrador, o producer já está lendo a próxima página do legado. O `Channel(2)` gera backpressure natural.
+Ganho: enquanto o consumer faz `INSERT/COPY` no destino + `storeBatch` no schema do migrador, o producer já está lendo a próxima página do legado. O `Channel(2)` gera backpressure natural. Ao aguardar espaço no channel, o producer só aborta quando o consumer fica sem atualizar o progresso da entidade por `MIGRATION_ENTITY_STALL_TIMEOUT` segundos (`900` por padrão; `0` desabilita).
 
 ### Paginação
 

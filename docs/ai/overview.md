@@ -57,6 +57,7 @@ MIGRATION_MAPPING_CHUNK_SIZE=1000
 MIGRATION_MAPPING_COROUTINES=4
 MIGRATION_ID_MAPPING_CACHE_SKIP=rules,import_records,confrontation_records
 MIGRATION_USE_COPY=true          # caminho de alto volume nas sources maiores
+MIGRATION_ENTITY_STALL_TIMEOUT=900 # aborta entidade sem progresso ao aguardar o channel; 0 desabilita
 MIGRATION_RATE_LIMIT=60          # req/min padrão
 MIGRATION_BULK_RATE_LIMIT=30     # req/min endpoints de alto volume
 ```
