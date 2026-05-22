@@ -99,11 +99,7 @@ class MigrationJobController
     #[PostMapping(path: 'database')]
     public function dispatch(): PsrResponseInterface
     {
-        $legacyDb = (string) $this->request->input('legacy_db', '');
-
-        if ($legacyDb === '') {
-            throw new ValidationFailedException("The 'legacy_db' field is required.");
-        }
+        $legacyDb = $this->readLegacyDb();
 
         // Valida smoke test antes de aceitar o job. Falha aqui retorna 422.
         $this->legacyConnectionFactory->connect($legacyDb);
@@ -121,6 +117,62 @@ class MigrationJobController
             'status' => 'queued',
             'status_url' => $statusUrl,
         ])->withStatus(202)->withHeader('Location', $statusUrl);
+    }
+
+    #[OA\Get(
+        path: '/api/v1/migration/database/availability',
+        summary: 'Verificar disponibilidade de um banco legado',
+        description: 'Valida se o banco legado informado em `legacy_db` está acessível para migração.',
+        tags: ['Status & Control'],
+        security: [['apiKeyAuth' => []]],
+        parameters: [
+            new OA\Parameter(
+                name: 'legacy_db',
+                in: 'query',
+                required: true,
+                description: 'Nome do database legado a validar.',
+                schema: new OA\Schema(type: 'string', example: 'cont_focons')
+            ),
+        ],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Disponibilidade avaliada com sucesso',
+                content: new OA\JsonContent(
+                    required: ['legacy_db', 'available', 'message'],
+                    properties: [
+                        new OA\Property(property: 'legacy_db', type: 'string', example: 'cont_focons'),
+                        new OA\Property(property: 'available', type: 'boolean', example: true),
+                        new OA\Property(property: 'message', type: 'string', example: 'Legacy database is reachable.'),
+                    ]
+                )
+            ),
+            new OA\Response(response: 401, description: 'API key inválida', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: "Campo 'legacy_db' ausente", content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+        ]
+    )]
+    #[GetMapping(path: 'database/availability')]
+    public function availability(): PsrResponseInterface
+    {
+        $legacyDb = $this->readLegacyDb();
+
+        try {
+            $this->legacyConnectionFactory->connect($legacyDb);
+
+            return $this->response->json([
+                'legacy_db' => $legacyDb,
+                'available' => true,
+                'message' => 'Legacy database is reachable.',
+            ]);
+        } catch (ValidationFailedException $e) {
+            return $this->response->json([
+                'legacy_db' => $legacyDb,
+                'available' => false,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     #[OA\Get(
@@ -161,7 +213,7 @@ class MigrationJobController
                         new OA\Property(
                             property: 'entity_progress',
                             type: 'object',
-                            description: 'Mapa por entidade com progresso e erros.'
+                            description: 'Mapa por entidade com progresso e erros. Cada entidade pode conter `target` (total de registros esperados no legado, ou null se a Source não implementar countSql).'
                         ),
                         new OA\Property(property: 'error_summary', type: 'object', nullable: true),
                         new OA\Property(property: 'started_at', type: 'string', format: 'date-time', nullable: true),
@@ -250,5 +302,16 @@ class MigrationJobController
                 ? $this->jobService->listByMigrationScope($legacyDb)
                 : $this->jobService->listRecent()
         );
+    }
+
+    private function readLegacyDb(): string
+    {
+        $legacyDb = trim((string) $this->request->input('legacy_db', ''));
+
+        if ($legacyDb === '') {
+            throw new ValidationFailedException("The 'legacy_db' field is required.");
+        }
+
+        return $legacyDb;
     }
 }
