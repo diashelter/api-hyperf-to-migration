@@ -255,7 +255,14 @@ class MigrationJobController
     public function duplicates(): PsrResponseInterface
     {
         $legacyDb = $this->readLegacyDb();
-        $legacyConnection = $this->legacyConnectionFactory->connect($legacyDb);
+
+        try {
+            $legacyConnection = $this->legacyConnectionFactory->connect($legacyDb);
+        } catch (ValidationFailedException) {
+            throw new ValidationFailedException(
+                "Não foi possível conectar ao banco legado '{$legacyDb}'. Verifique se o nome do banco está correto e se ele está disponível antes de validar duplicidades."
+            );
+        }
 
         return $this->response->json(
             $this->legacyDuplicateValidationService->validate($legacyDb, $legacyConnection)

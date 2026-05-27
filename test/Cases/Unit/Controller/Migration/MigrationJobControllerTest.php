@@ -163,6 +163,43 @@ final class MigrationJobControllerTest extends UnitTestCase
         $this->assertNull($capturedStatus);
     }
 
+    public function testDuplicatesThrowsValidationFailedWhenLegacyDatabaseIsUnavailable(): void
+    {
+        $request = $this->createMock(RequestInterface::class);
+        $request->expects($this->once())
+            ->method('input')
+            ->with('legacy_db', '')
+            ->willReturn('cont_krypton');
+
+        $legacyConnectionFactory = $this->createMock(LegacyConnectionFactory::class);
+        $legacyConnectionFactory->expects($this->once())
+            ->method('connect')
+            ->with('cont_krypton')
+            ->willThrowException(new ValidationFailedException('Failed to connect to legacy database cont_krypton.'));
+
+        $duplicateValidationService = $this->createMock(LegacyDuplicateValidationService::class);
+        $duplicateValidationService->expects($this->never())
+            ->method('validate');
+
+        $capturedPayload = null;
+        $capturedStatus = null;
+        $response = $this->createResponseMock($capturedPayload, $capturedStatus);
+
+        $controller = $this->createController(
+            $request,
+            $response,
+            $legacyConnectionFactory,
+            $duplicateValidationService
+        );
+
+        $this->expectException(ValidationFailedException::class);
+        $this->expectExceptionMessage(
+            "Não foi possível conectar ao banco legado 'cont_krypton'. Verifique se o nome do banco está correto e se ele está disponível antes de validar duplicidades."
+        );
+
+        $controller->duplicates();
+    }
+
     public function testDuplicatesThrowsValidationFailedWhenLegacyDatabaseIsMissing(): void
     {
         $request = $this->createMock(RequestInterface::class);
