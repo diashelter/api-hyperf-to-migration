@@ -14,6 +14,7 @@ namespace HyperfTest\Cases\Unit\Controller\Migration;
 
 use App\Controller\Migration\MigrationJobController;
 use App\Exception\ValidationFailedException;
+use App\Service\LegacyDuplicateValidationService;
 use App\Service\LegacyConnectionFactory;
 use Hyperf\AsyncQueue\Driver\DriverFactory;
 use Hyperf\AsyncQueue\Driver\DriverInterface;
@@ -113,10 +114,85 @@ final class MigrationJobControllerTest extends UnitTestCase
         $controller->availability();
     }
 
+    public function testDuplicatesReturnsValidationPayloadFromService(): void
+    {
+        $request = $this->createMock(RequestInterface::class);
+        $request->expects($this->once())
+            ->method('input')
+            ->with('legacy_db', '')
+            ->willReturn('cont_focons');
+
+        $legacyConnectionFactory = $this->createMock(LegacyConnectionFactory::class);
+        $legacyConnectionFactory->expects($this->once())
+            ->method('connect')
+            ->with('cont_focons')
+            ->willReturn('legacy_database_cont_focons');
+
+        $expectedPayload = [
+            'legacy_db' => 'cont_focons',
+            'has_violations' => false,
+            'summary' => [
+                'entities_checked' => 8,
+                'rules_checked' => 12,
+                'violations' => 0,
+            ],
+            'violations' => [],
+        ];
+
+        $duplicateValidationService = $this->createMock(LegacyDuplicateValidationService::class);
+        $duplicateValidationService->expects($this->once())
+            ->method('validate')
+            ->with('cont_focons', 'legacy_database_cont_focons')
+            ->willReturn($expectedPayload);
+
+        $capturedPayload = null;
+        $capturedStatus = null;
+        $response = $this->createResponseMock($capturedPayload, $capturedStatus);
+
+        $controller = $this->createController(
+            $request,
+            $response,
+            $legacyConnectionFactory,
+            $duplicateValidationService
+        );
+
+        $result = $controller->duplicates();
+
+        $this->assertInstanceOf(PsrResponseInterface::class, $result);
+        $this->assertSame($expectedPayload, $capturedPayload);
+        $this->assertNull($capturedStatus);
+    }
+
+    public function testDuplicatesThrowsValidationFailedWhenLegacyDatabaseIsMissing(): void
+    {
+        $request = $this->createMock(RequestInterface::class);
+        $request->expects($this->once())
+            ->method('input')
+            ->with('legacy_db', '')
+            ->willReturn(' ');
+
+        $capturedPayload = null;
+        $capturedStatus = null;
+        $response = $this->createResponseMock($capturedPayload, $capturedStatus);
+
+        $controller = $this->createController(
+            $request,
+            $response,
+            $this->createMock(LegacyConnectionFactory::class),
+            $this->createMock(LegacyDuplicateValidationService::class)
+        );
+
+        $this->expectException(ValidationFailedException::class);
+        $this->expectExceptionMessage("The 'legacy_db' field is required.");
+
+        $controller->duplicates();
+    }
+
     private function createController(
         RequestInterface $request,
         ResponseInterface $response,
-        LegacyConnectionFactory $legacyConnectionFactory
+        LegacyConnectionFactory $legacyConnectionFactory,
+        ?LegacyDuplicateValidationService $duplicateValidationService = null
     ): MigrationJobController {
         $queue = $this->createMock(DriverInterface::class);
 
@@ -130,6 +206,11 @@ final class MigrationJobControllerTest extends UnitTestCase
         $this->injectProperty($controller, 'request', $request);
         $this->injectProperty($controller, 'response', $response);
         $this->injectProperty($controller, 'legacyConnectionFactory', $legacyConnectionFactory);
+        $this->injectProperty(
+            $controller,
+            'legacyDuplicateValidationService',
+            $duplicateValidationService ?? $this->createMock(LegacyDuplicateValidationService::class)
+        );
 
         return $controller;
     }
