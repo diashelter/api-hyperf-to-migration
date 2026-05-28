@@ -17,6 +17,7 @@ use App\Exception\ValidationFailedException;
 use App\Job\RunDatabaseMigrationJob;
 use App\Middleware\ApiTokenMiddleware;
 use App\Middleware\RateLimitMiddleware;
+use App\Service\LegacyDuplicateValidationService;
 use App\Service\LegacyConnectionFactory;
 use App\Service\MigrationJobService;
 use Hyperf\AsyncQueue\Driver\DriverFactory;
@@ -48,6 +49,9 @@ class MigrationJobController
 
     #[Inject]
     protected LegacyConnectionFactory $legacyConnectionFactory;
+
+    #[Inject]
+    protected LegacyDuplicateValidationService $legacyDuplicateValidationService;
 
     private DriverInterface $queue;
 
@@ -173,6 +177,96 @@ class MigrationJobController
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    #[OA\Get(
+        path: '/api/v1/migration/database/duplicates',
+        summary: 'Validar duplicidades no banco legado',
+        description: 'Executa validações de duplicidade focadas em risco de migração para o `legacy_db` informado.',
+        tags: ['Status & Control'],
+        security: [['apiKeyAuth' => []]],
+        parameters: [
+            new OA\Parameter(
+                name: 'legacy_db',
+                in: 'query',
+                required: true,
+                description: 'Nome do database legado a validar.',
+                schema: new OA\Schema(type: 'string', example: 'cont_focons')
+            ),
+        ],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Validação de duplicidades executada com sucesso',
+                content: new OA\JsonContent(
+                    required: ['legacy_db', 'has_violations', 'summary', 'violations'],
+                    properties: [
+                        new OA\Property(property: 'legacy_db', type: 'string', example: 'cont_focons'),
+                        new OA\Property(property: 'has_violations', type: 'boolean', example: true),
+                        new OA\Property(
+                            property: 'summary',
+                            type: 'object',
+                            required: ['entities_checked', 'rules_checked', 'violations'],
+                            properties: [
+                                new OA\Property(property: 'entities_checked', type: 'integer', example: 8),
+                                new OA\Property(property: 'rules_checked', type: 'integer', example: 12),
+                                new OA\Property(property: 'violations', type: 'integer', example: 3),
+                            ]
+                        ),
+                        new OA\Property(
+                            property: 'violations',
+                            type: 'array',
+                            items: new OA\Items(
+                                properties: [
+                                    new OA\Property(property: 'entity', type: 'string', example: 'users'),
+                                    new OA\Property(property: 'table', type: 'string', example: 'usuarios'),
+                                    new OA\Property(property: 'rule', type: 'string', example: 'duplicate_email'),
+                                    new OA\Property(property: 'field', type: 'string', nullable: true, example: 'email'),
+                                    new OA\Property(property: 'total_groups', type: 'integer', example: 2),
+                                    new OA\Property(property: 'total_records', type: 'integer', example: 5),
+                                    new OA\Property(
+                                        property: 'samples',
+                                        type: 'array',
+                                        items: new OA\Items(
+                                            properties: [
+                                                new OA\Property(property: 'value', type: 'string', nullable: true, example: 'user@example.com'),
+                                                new OA\Property(property: 'count', type: 'integer', example: 3),
+                                                new OA\Property(
+                                                    property: 'legacy_ids',
+                                                    type: 'array',
+                                                    items: new OA\Items(type: 'string')
+                                                ),
+                                            ]
+                                        )
+                                    ),
+                                ]
+                            )
+                        ),
+                    ]
+                )
+            ),
+            new OA\Response(response: 401, description: 'API key inválida', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 422, description: "Campo 'legacy_db' ausente ou falha na conexão com legado", content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+            new OA\Response(response: 429, description: 'Rate limit excedido', content: new OA\JsonContent(ref: '#/components/schemas/RateLimitResponse')),
+            new OA\Response(response: 500, description: 'Erro interno do servidor', content: new OA\JsonContent(ref: '#/components/schemas/ProblemResponse')),
+        ]
+    )]
+    #[GetMapping(path: 'database/duplicates')]
+    public function duplicates(): PsrResponseInterface
+    {
+        $legacyDb = $this->readLegacyDb();
+
+        try {
+            $legacyConnection = $this->legacyConnectionFactory->connect($legacyDb);
+        } catch (ValidationFailedException) {
+            throw new ValidationFailedException(
+                "Não foi possível conectar ao banco legado '{$legacyDb}'. Verifique se o nome do banco está correto e se ele está disponível antes de validar duplicidades."
+            );
+        }
+
+        return $this->response->json(
+            $this->legacyDuplicateValidationService->validate($legacyDb, $legacyConnection)
+        );
     }
 
     #[OA\Get(
