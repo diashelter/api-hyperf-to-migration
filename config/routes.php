@@ -9,6 +9,7 @@ declare(strict_types=1);
  * @contact  group@hyperf.io
  * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
  */
+
 use Hyperf\HttpServer\Router\Router;
 
 // Health check
@@ -23,6 +24,3 @@ Router::get('/', function () {
 Router::get('/health', function () {
     return ['status' => 'ok', 'timestamp' => date('c')];
 });
-
-// Migration API routes are registered via Controller annotations
-// Middleware is configured via #[Middleware] annotations on each controller
