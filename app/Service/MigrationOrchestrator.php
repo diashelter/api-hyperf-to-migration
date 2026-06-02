@@ -33,6 +33,9 @@ class MigrationOrchestrator
     #[Inject]
     protected ExportLayoutSyncService $exportLayoutSyncService;
 
+    #[Inject]
+    protected ContractCompanyCountSyncService $contractCompanyCountSyncService;
+
     private LoggerInterface $logger;
 
     private ContainerInterface $container;
@@ -134,6 +137,15 @@ class MigrationOrchestrator
                     $this->logger->error("[job {$jobId}] {$message}");
                     return;
                 }
+            }
+        }
+
+        if (empty($errorSummary)) {
+            try {
+                $this->contractCompanyCountSyncService->sync($contractId);
+            } catch (Throwable $e) {
+                $errorSummary['contract_company_count'] = $e->getMessage();
+                $this->logger->error("[job {$jobId}] contract company_count sync failed: " . $e->getMessage());
             }
         }
 
