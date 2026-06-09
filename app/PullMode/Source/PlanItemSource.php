@@ -50,23 +50,32 @@ class PlanItemSource extends AbstractLegacySource
     {
         return <<<'SQL'
             SELECT
-                pk                  AS legacy_id,
-                fk_pcontasconc      AS legacy_plan_id,
-                nome_conta          AS "name",
-                codigo              AS complete_account,
-                codigo_redu         AS reduced_account,
-                tipo                AS "type",
-                origem              AS origin
+                pcontasconc_item.pk             AS legacy_id,
+                pcontasconc_item.fk_pcontasconc AS legacy_plan_id,
+                pcontasconc_item.nome_conta     AS "name",
+                pcontasconc_item.codigo         AS complete_account,
+                pcontasconc_item.codigo_redu    AS reduced_account,
+                pcontasconc_item.tipo           AS "type",
+                pcontasconc_item.origem         AS origin
             FROM pcontasconc_item
-            WHERE pk > COALESCE(CAST(NULLIF(:last_id, '') AS INTEGER), 0)
-            ORDER BY pk
+            INNER JOIN pcontasconc ON pcontasconc.pk = pcontasconc_item.fk_pcontasconc
+            WHERE pcontasconc_item.fk_pcontasconc IS NOT NULL
+              AND pcontasconc_item.fk_pcontasconc <> 0
+              AND pcontasconc_item.pk > COALESCE(CAST(NULLIF(:last_id, '') AS INTEGER), 0)
+            ORDER BY pcontasconc_item.pk
             LIMIT :limit
         SQL;
     }
 
     public function countSql(): ?string
     {
-        return 'SELECT COUNT(*) AS count FROM pcontasconc_item';
+        return <<<'SQL'
+            SELECT COUNT(*) AS count
+            FROM pcontasconc_item
+            INNER JOIN pcontasconc ON pcontasconc.pk = pcontasconc_item.fk_pcontasconc
+            WHERE pcontasconc_item.fk_pcontasconc IS NOT NULL
+              AND pcontasconc_item.fk_pcontasconc <> 0
+        SQL;
     }
 
     public function validationRules(): array
