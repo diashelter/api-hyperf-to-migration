@@ -54,38 +54,39 @@ class PeopleVinculatedSource extends AbstractLegacySource
                     pessoas.id,
                     pessoas.nomerazao,
                     NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
-                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
                 FROM pessoas
             ),
             pessoas_ref AS (
-                SELECT legacy_id AS canonical_people_id, normalized_cpf, normalized_name
+                SELECT legacy_id AS canonical_people_id, normalized_cpf, normalized_name_key
                 FROM (
                     SELECT DISTINCT ON (normalized_cpf)
                         id AS legacy_id,
                         normalized_cpf,
-                        normalized_name
+                        normalized_name_key
                     FROM pessoas_normalized
                     WHERE normalized_cpf IS NOT NULL
                     ORDER BY normalized_cpf, id
                 ) pessoas_com_cpf
                 UNION ALL
-                SELECT legacy_id AS canonical_people_id, normalized_cpf, normalized_name
+                SELECT legacy_id AS canonical_people_id, normalized_cpf, normalized_name_key
                 FROM (
-                    SELECT DISTINCT ON (normalized_name)
+                    SELECT DISTINCT ON (normalized_name_key)
                         id AS legacy_id,
                         normalized_cpf,
-                        normalized_name
+                        normalized_name_key
                     FROM pessoas_normalized
                     WHERE normalized_cpf IS NULL
-                      AND normalized_name IS NOT NULL
-                    ORDER BY normalized_name, id
+                      AND normalized_name_key IS NOT NULL
+                    ORDER BY normalized_name_key, id
                 ) pessoas_sem_cpf
             )
             SELECT 
                 pessoas_vinculo.id AS legacy_id,
                 pessoas_ref.canonical_people_id AS legacy_people_id,
-                fk_empresa AS legacy_company_id,
-                fk_compartilhamento AS legacy_rules_sharing_id,
+                NULLIF(fk_empresa, 0) AS legacy_company_id,
+                NULLIF(fk_compartilhamento, 0) AS legacy_rules_sharing_id,
                 conta_deb AS debit_account,
                 conta_cred AS credit_account,
                 participante AS participant
@@ -99,10 +100,30 @@ class PeopleVinculatedSource extends AbstractLegacySource
                     )
                     OR (
                         pessoas_vinculadas.normalized_cpf IS NULL
-                        AND pessoas_vinculadas.normalized_name IS NOT NULL
+                        AND pessoas_vinculadas.normalized_name_key IS NOT NULL
                         AND pessoas_ref.normalized_cpf IS NULL
-                        AND pessoas_ref.normalized_name = pessoas_vinculadas.normalized_name
+                        AND pessoas_ref.normalized_name_key = pessoas_vinculadas.normalized_name_key
                     )
+            WHERE (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) <> 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) = 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM empresas
+                        WHERE empresas.pk = pessoas_vinculo.fk_empresa
+                          AND empresas.pk <> 0
+                    )
+                )
+                OR (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) = 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) <> 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM plano_contas
+                        WHERE plano_contas.pk = pessoas_vinculo.fk_compartilhamento
+                          AND plano_contas.pk <> 0
+                    )
+                )
             ORDER BY 1
         SQL;
     }
@@ -114,31 +135,32 @@ class PeopleVinculatedSource extends AbstractLegacySource
                 SELECT
                     pessoas.id,
                     NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
-                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
                 FROM pessoas
             ),
             pessoas_ref AS (
-                SELECT canonical_people_id, normalized_cpf, normalized_name
+                SELECT canonical_people_id, normalized_cpf, normalized_name_key
                 FROM (
                     SELECT DISTINCT ON (normalized_cpf)
                         id AS canonical_people_id,
                         normalized_cpf,
-                        normalized_name
+                        normalized_name_key
                     FROM pessoas_normalized
                     WHERE normalized_cpf IS NOT NULL
                     ORDER BY normalized_cpf, id
                 ) pessoas_com_cpf
                 UNION ALL
-                SELECT canonical_people_id, normalized_cpf, normalized_name
+                SELECT canonical_people_id, normalized_cpf, normalized_name_key
                 FROM (
-                    SELECT DISTINCT ON (normalized_name)
+                    SELECT DISTINCT ON (normalized_name_key)
                         id AS canonical_people_id,
                         normalized_cpf,
-                        normalized_name
+                        normalized_name_key
                     FROM pessoas_normalized
                     WHERE normalized_cpf IS NULL
-                      AND normalized_name IS NOT NULL
-                    ORDER BY normalized_name, id
+                      AND normalized_name_key IS NOT NULL
+                    ORDER BY normalized_name_key, id
                 ) pessoas_sem_cpf
             )
             SELECT COUNT(*) AS count
@@ -152,10 +174,30 @@ class PeopleVinculatedSource extends AbstractLegacySource
                     )
                     OR (
                         pessoas_vinculadas.normalized_cpf IS NULL
-                        AND pessoas_vinculadas.normalized_name IS NOT NULL
+                        AND pessoas_vinculadas.normalized_name_key IS NOT NULL
                         AND pessoas_ref.normalized_cpf IS NULL
-                        AND pessoas_ref.normalized_name = pessoas_vinculadas.normalized_name
+                        AND pessoas_ref.normalized_name_key = pessoas_vinculadas.normalized_name_key
                     )
+            WHERE (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) <> 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) = 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM empresas
+                        WHERE empresas.pk = pessoas_vinculo.fk_empresa
+                          AND empresas.pk <> 0
+                    )
+                )
+                OR (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) = 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) <> 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM plano_contas
+                        WHERE plano_contas.pk = pessoas_vinculo.fk_compartilhamento
+                          AND plano_contas.pk <> 0
+                    )
+                )
         SQL;
     }
 

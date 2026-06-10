@@ -47,7 +47,8 @@ class PeopleSource extends AbstractLegacySource
                     pessoas.id,
                     pessoas.nomerazao,
                     NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
-                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
                 FROM pessoas
             )
             SELECT legacy_id, cpf_cnpj, corporate_name, legacy_contract_id
@@ -64,15 +65,15 @@ class PeopleSource extends AbstractLegacySource
             UNION ALL
             SELECT legacy_id, cpf_cnpj, corporate_name, legacy_contract_id
             FROM (
-                SELECT DISTINCT ON (normalized_name)
+                SELECT DISTINCT ON (normalized_name_key)
                     id AS legacy_id,
                     NULL::text AS cpf_cnpj,
                     nomerazao AS corporate_name,
                     CURRENT_DATABASE() AS legacy_contract_id
                 FROM pessoas_normalized
                 WHERE normalized_cpf IS NULL
-                  AND normalized_name IS NOT NULL
-                ORDER BY normalized_name, id
+                  AND normalized_name_key IS NOT NULL
+                ORDER BY normalized_name_key, id
             ) pessoas_sem_cpf
         SQL;
     }
@@ -84,7 +85,8 @@ class PeopleSource extends AbstractLegacySource
                 SELECT
                     pessoas.id,
                     NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
-                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
                 FROM pessoas
             ),
             pessoas_with_cpf AS (
@@ -100,12 +102,12 @@ class PeopleSource extends AbstractLegacySource
             pessoas_without_cpf AS (
                 SELECT id
                 FROM (
-                    SELECT DISTINCT ON (normalized_name)
+                    SELECT DISTINCT ON (normalized_name_key)
                         id
                     FROM pessoas_normalized
                     WHERE normalized_cpf IS NULL
-                      AND normalized_name IS NOT NULL
-                    ORDER BY normalized_name, id
+                      AND normalized_name_key IS NOT NULL
+                    ORDER BY normalized_name_key, id
                 ) pessoas_sem_cpf
             )
             SELECT COUNT(*) AS count
