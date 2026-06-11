@@ -14,8 +14,6 @@ namespace App\PullMode\Source;
 
 /**
  * Source legada → `peoples`. Sem FK (mas escopada por contract_id do header).
- *
- * TODO: ajustar nome da tabela legada e aliases das colunas.
  */
 class PeopleSource extends AbstractLegacySource
 {
@@ -44,28 +42,81 @@ class PeopleSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
-            SELECT DISTINCT ON ( REGEXP_REPLACE(cpfcnpj, '[^0-9]', '', 'g')  )
-                    pessoas.id AS legacy_id,
-                    REGEXP_REPLACE(pessoas.cpfcnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
-                        pessoas.nomerazao AS corporate_name,
+            WITH pessoas_normalized AS (
+                SELECT
+                    pessoas.id,
+                    pessoas.nomerazao,
+                    NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
+                FROM pessoas
+            )
+            SELECT legacy_id, cpf_cnpj, corporate_name, legacy_contract_id
+            FROM (
+                SELECT DISTINCT ON (normalized_cpf)
+                    id AS legacy_id,
+                    normalized_cpf AS cpf_cnpj,
+                    nomerazao AS corporate_name,
                     CURRENT_DATABASE() AS legacy_contract_id
-            FROM pessoas
-            WHERE cpfcnpj IS NOT null
+                FROM pessoas_normalized
+                WHERE normalized_cpf IS NOT NULL
+                ORDER BY normalized_cpf, id
+            ) pessoas_com_cpf
             UNION ALL
-            SELECT 
-                pessoas.id AS legacy_id,
-                pessoas.cpfcnpj AS cpf_cnpj,
-                    pessoas.nomerazao AS corporate_name,
-                CURRENT_DATABASE() AS legacy_contract_id
-            FROM pessoas
-            WHERE cpfcnpj IS NULL
-            ORDER BY 3
+            SELECT legacy_id, cpf_cnpj, corporate_name, legacy_contract_id
+            FROM (
+                SELECT DISTINCT ON (normalized_name_key)
+                    id AS legacy_id,
+                    NULL::text AS cpf_cnpj,
+                    nomerazao AS corporate_name,
+                    CURRENT_DATABASE() AS legacy_contract_id
+                FROM pessoas_normalized
+                WHERE normalized_cpf IS NULL
+                  AND normalized_name_key IS NOT NULL
+                ORDER BY normalized_name_key, id
+            ) pessoas_sem_cpf
         SQL;
     }
 
     public function countSql(): ?string
     {
-        return 'SELECT COUNT(*) AS count FROM pessoas';
+        return <<<'SQL'
+            WITH pessoas_normalized AS (
+                SELECT
+                    pessoas.id,
+                    NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
+                FROM pessoas
+            ),
+            pessoas_with_cpf AS (
+                SELECT id
+                FROM (
+                    SELECT DISTINCT ON (normalized_cpf)
+                        id
+                    FROM pessoas_normalized
+                    WHERE normalized_cpf IS NOT NULL
+                    ORDER BY normalized_cpf, id
+                ) pessoas_com_cpf
+            ),
+            pessoas_without_cpf AS (
+                SELECT id
+                FROM (
+                    SELECT DISTINCT ON (normalized_name_key)
+                        id
+                    FROM pessoas_normalized
+                    WHERE normalized_cpf IS NULL
+                      AND normalized_name_key IS NOT NULL
+                    ORDER BY normalized_name_key, id
+                ) pessoas_sem_cpf
+            )
+            SELECT COUNT(*) AS count
+            FROM (
+                SELECT id FROM pessoas_with_cpf
+                UNION ALL
+                SELECT id FROM pessoas_without_cpf
+            ) pessoas_migradas
+        SQL;
     }
 
     public function validationRules(): array

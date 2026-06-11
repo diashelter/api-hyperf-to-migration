@@ -42,13 +42,24 @@ class ParallelInsertService
         $records = $this->ensureUuids($this->normalizeRecords($records));
         $chunks = array_chunk($records, $chunkSize);
         $parallel = new Parallel($maxCoroutines);
-        $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
+        $results = [
+            'inserted' => 0,
+            'failed' => 0,
+            'errors' => [],
+            'successful_chunk_indexes' => [],
+            'successful_record_ids' => [],
+        ];
 
         foreach ($chunks as $index => $chunk) {
             $parallel->add(function () use ($table, $chunk, $index, $connection) {
                 try {
                     Db::connection($connection)->table($table)->insert($chunk);
-                    return ['success' => true, 'count' => count($chunk), 'index' => $index];
+                    return [
+                        'success' => true,
+                        'count' => count($chunk),
+                        'index' => $index,
+                        'record_ids' => $this->recordIds($chunk),
+                    ];
                 } catch (Throwable $e) {
                     return [
                         'success' => false,
@@ -65,6 +76,11 @@ class ParallelInsertService
         foreach ($chunkResults as $chunkResult) {
             if ($chunkResult['success']) {
                 $results['inserted'] += $chunkResult['count'];
+                $results['successful_chunk_indexes'][] = $chunkResult['index'];
+                $results['successful_record_ids'] = array_merge(
+                    $results['successful_record_ids'],
+                    $chunkResult['record_ids'] ?? []
+                );
             } else {
                 $results['failed'] += count($chunks[$chunkResult['index']] ?? []);
                 $results['errors'][] = [
@@ -99,7 +115,13 @@ class ParallelInsertService
         $chunkSize = $chunkSize ?: max(1, (int) env('MIGRATION_COPY_CHUNK_SIZE', 5000));
         $records = $this->ensureUuids($this->normalizeRecords($records));
 
-        $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
+        $results = [
+            'inserted' => 0,
+            'failed' => 0,
+            'errors' => [],
+            'successful_chunk_indexes' => [],
+            'successful_record_ids' => [],
+        ];
         if (empty($records)) {
             return $results;
         }
@@ -369,21 +391,44 @@ class ParallelInsertService
     }
 
     /**
+     * @param array<int, array<string, mixed>> $records
+     * @return array<int, string>
+     */
+    private function recordIds(array $records): array
+    {
+        return array_values(array_filter(array_map(
+            static fn (array $record): ?string => isset($record['id']) ? (string) $record['id'] : null,
+            $records
+        )));
+    }
+
+    /**
      * @param array<int, array<string, mixed>> $chunks
      * @param callable(array<int, array<string, mixed>>): void $callback
-     * @return array{inserted: int, failed: int, errors: array<int, array<string, mixed>>}
+     * @return array{inserted: int, failed: int, errors: array<int, array<string, mixed>>, successful_chunk_indexes: array<int, int>, successful_record_ids: array<int, string>}
      */
     private function runChunkJobs(array $chunks, int $maxCoroutines, callable $callback): array
     {
         $parallel = new Parallel($maxCoroutines);
-        $results = ['inserted' => 0, 'failed' => 0, 'errors' => []];
+        $results = [
+            'inserted' => 0,
+            'failed' => 0,
+            'errors' => [],
+            'successful_chunk_indexes' => [],
+            'successful_record_ids' => [],
+        ];
 
         foreach ($chunks as $index => $chunk) {
             $parallel->add(function () use ($chunk, $index, $callback) {
                 try {
                     $callback($chunk);
 
-                    return ['success' => true, 'count' => count($chunk), 'index' => $index];
+                    return [
+                        'success' => true,
+                        'count' => count($chunk),
+                        'index' => $index,
+                        'record_ids' => $this->recordIds($chunk),
+                    ];
                 } catch (Throwable $e) {
                     return [
                         'success' => false,
@@ -400,6 +445,11 @@ class ParallelInsertService
         foreach ($chunkResults as $chunkResult) {
             if ($chunkResult['success']) {
                 $results['inserted'] += $chunkResult['count'];
+                $results['successful_chunk_indexes'][] = $chunkResult['index'];
+                $results['successful_record_ids'] = array_merge(
+                    $results['successful_record_ids'],
+                    $chunkResult['record_ids'] ?? []
+                );
             } else {
                 $results['failed'] += count($chunks[$chunkResult['index']] ?? []);
                 $results['errors'][] = [

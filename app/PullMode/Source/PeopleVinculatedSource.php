@@ -14,8 +14,6 @@ namespace App\PullMode\Source;
 
 /**
  * Source legada → `people_vinculated`. FKs: peoples, companies, rules_sharings.
- *
- * TODO: ajustar nome da tabela legada e aliases das colunas.
  */
 class PeopleVinculatedSource extends AbstractLegacySource
 {
@@ -51,42 +49,156 @@ class PeopleVinculatedSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
-            WITH pessoas_ref AS (
-            SELECT DISTINCT ON ( REGEXP_REPLACE(cpfcnpj, '[^0-9]', '', 'g')  )
-                        pessoas.id AS legacy_id,
-                        REGEXP_REPLACE(pessoas.cpfcnpj, '[^0-9]', '', 'g') AS cpf_cnpj,
-                            pessoas.nomerazao AS corporate_name,
-                        CURRENT_DATABASE() AS legacy_contract_id
-                    FROM pessoas
-                    WHERE cpfcnpj IS NOT null
-            UNION ALL
-            SELECT 
-                        pessoas.id AS legacy_id,
-                        pessoas.cpfcnpj AS cpf_cnpj,
-                            pessoas.nomerazao AS corporate_name,
-                        CURRENT_DATABASE() AS legacy_contract_id
-                    FROM pessoas
-                    WHERE cpfcnpj IS NULL
-                    
-            ORDER BY 3
+            WITH pessoas_normalized AS (
+                SELECT
+                    pessoas.id,
+                    pessoas.nomerazao,
+                    NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
+                FROM pessoas
+            ),
+            pessoas_ref AS (
+                SELECT legacy_id AS canonical_people_id, normalized_cpf, normalized_name_key
+                FROM (
+                    SELECT DISTINCT ON (normalized_cpf)
+                        id AS legacy_id,
+                        normalized_cpf,
+                        normalized_name_key
+                    FROM pessoas_normalized
+                    WHERE normalized_cpf IS NOT NULL
+                    ORDER BY normalized_cpf, id
+                ) pessoas_com_cpf
+                UNION ALL
+                SELECT legacy_id AS canonical_people_id, normalized_cpf, normalized_name_key
+                FROM (
+                    SELECT DISTINCT ON (normalized_name_key)
+                        id AS legacy_id,
+                        normalized_cpf,
+                        normalized_name_key
+                    FROM pessoas_normalized
+                    WHERE normalized_cpf IS NULL
+                      AND normalized_name_key IS NOT NULL
+                    ORDER BY normalized_name_key, id
+                ) pessoas_sem_cpf
             )
             SELECT 
                 pessoas_vinculo.id AS legacy_id,
-                pessoas_ref.legacy_id AS legacy_people_id,
-                fk_empresa AS legacy_company_id,
-                fk_compartilhamento AS legacy_rules_sharing_id,
+                pessoas_ref.canonical_people_id AS legacy_people_id,
+                NULLIF(fk_empresa, 0) AS legacy_company_id,
+                NULLIF(fk_compartilhamento, 0) AS legacy_rules_sharing_id,
                 conta_deb AS debit_account,
                 conta_cred AS credit_account,
                 participante AS participant
             FROM pessoas_vinculo
-                JOIN pessoas_ref ON pessoas_ref.legacy_id = pessoas_vinculo.fk_pessoa
+                JOIN pessoas_normalized pessoas_vinculadas
+                    ON pessoas_vinculadas.id = pessoas_vinculo.fk_pessoa
+                JOIN pessoas_ref
+                    ON (
+                        pessoas_vinculadas.normalized_cpf IS NOT NULL
+                        AND pessoas_ref.normalized_cpf = pessoas_vinculadas.normalized_cpf
+                    )
+                    OR (
+                        pessoas_vinculadas.normalized_cpf IS NULL
+                        AND pessoas_vinculadas.normalized_name_key IS NOT NULL
+                        AND pessoas_ref.normalized_cpf IS NULL
+                        AND pessoas_ref.normalized_name_key = pessoas_vinculadas.normalized_name_key
+                    )
+            WHERE (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) <> 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) = 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM empresas
+                        WHERE empresas.pk = pessoas_vinculo.fk_empresa
+                          AND empresas.pk <> 0
+                    )
+                )
+                OR (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) = 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) <> 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM plano_contas
+                        WHERE plano_contas.pk = pessoas_vinculo.fk_compartilhamento
+                          AND plano_contas.pk <> 0
+                    )
+                )
             ORDER BY 1
         SQL;
     }
 
     public function countSql(): ?string
     {
-        return 'SELECT COUNT(*) AS count FROM pessoas_vinculo';
+        return <<<'SQL'
+            WITH pessoas_normalized AS (
+                SELECT
+                    pessoas.id,
+                    NULLIF(REGEXP_REPLACE(COALESCE(pessoas.cpfcnpj, ''), '[^0-9]', '', 'g'), '') AS normalized_cpf,
+                    NULLIF(TRIM(pessoas.nomerazao), '') AS normalized_name,
+                    LOWER(NULLIF(TRIM(pessoas.nomerazao), '')) AS normalized_name_key
+                FROM pessoas
+            ),
+            pessoas_ref AS (
+                SELECT canonical_people_id, normalized_cpf, normalized_name_key
+                FROM (
+                    SELECT DISTINCT ON (normalized_cpf)
+                        id AS canonical_people_id,
+                        normalized_cpf,
+                        normalized_name_key
+                    FROM pessoas_normalized
+                    WHERE normalized_cpf IS NOT NULL
+                    ORDER BY normalized_cpf, id
+                ) pessoas_com_cpf
+                UNION ALL
+                SELECT canonical_people_id, normalized_cpf, normalized_name_key
+                FROM (
+                    SELECT DISTINCT ON (normalized_name_key)
+                        id AS canonical_people_id,
+                        normalized_cpf,
+                        normalized_name_key
+                    FROM pessoas_normalized
+                    WHERE normalized_cpf IS NULL
+                      AND normalized_name_key IS NOT NULL
+                    ORDER BY normalized_name_key, id
+                ) pessoas_sem_cpf
+            )
+            SELECT COUNT(*) AS count
+            FROM pessoas_vinculo
+                JOIN pessoas_normalized pessoas_vinculadas
+                    ON pessoas_vinculadas.id = pessoas_vinculo.fk_pessoa
+                JOIN pessoas_ref
+                    ON (
+                        pessoas_vinculadas.normalized_cpf IS NOT NULL
+                        AND pessoas_ref.normalized_cpf = pessoas_vinculadas.normalized_cpf
+                    )
+                    OR (
+                        pessoas_vinculadas.normalized_cpf IS NULL
+                        AND pessoas_vinculadas.normalized_name_key IS NOT NULL
+                        AND pessoas_ref.normalized_cpf IS NULL
+                        AND pessoas_ref.normalized_name_key = pessoas_vinculadas.normalized_name_key
+                    )
+            WHERE (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) <> 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) = 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM empresas
+                        WHERE empresas.pk = pessoas_vinculo.fk_empresa
+                          AND empresas.pk <> 0
+                    )
+                )
+                OR (
+                    COALESCE(pessoas_vinculo.fk_empresa, 0) = 0
+                    AND COALESCE(pessoas_vinculo.fk_compartilhamento, 0) <> 0
+                    AND EXISTS (
+                        SELECT 1
+                        FROM plano_contas
+                        WHERE plano_contas.pk = pessoas_vinculo.fk_compartilhamento
+                          AND plano_contas.pk <> 0
+                    )
+                )
+        SQL;
     }
 
     public function validationRules(): array

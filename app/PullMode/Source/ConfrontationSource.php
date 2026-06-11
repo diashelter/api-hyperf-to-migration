@@ -40,9 +40,40 @@ class ConfrontationSource extends AbstractLegacySource
     public function sql(): string
     {
         return <<<'SQL'
+            WITH scoped_confrontos AS (
+                SELECT *
+                FROM confrontos
+                WHERE confrontos.created_at > NOW() - INTERVAL '60 days'
+                  AND confrontos.pk > COALESCE(
+                      CAST(NULLIF(:last_id, '') AS UUID),
+                      '00000000-0000-0000-0000-000000000000'::UUID
+                    )
+                ORDER BY confrontos.pk ASC
+                LIMIT :limit
+            ),
+            rec_fin AS (
+                SELECT
+                    confrontos_itens.fk_confrontos,
+                    COUNT(DISTINCT confrontos_itens.pk) AS entries_count,
+                    STRING_AGG(DISTINCT confrontos_itens.fk_layoutimp::text, ',' ORDER BY confrontos_itens.fk_layoutimp::text) AS layouts
+                FROM confrontos_itens
+                JOIN scoped_confrontos ON scoped_confrontos.pk = confrontos_itens.fk_confrontos
+                WHERE confrontos_itens.tipo = 'F'
+                GROUP BY confrontos_itens.fk_confrontos
+            ),
+            rec_ban AS (
+                SELECT
+                    confrontos_itens.fk_confrontos,
+                    COUNT(DISTINCT confrontos_itens.pk) AS entries_count,
+                    STRING_AGG(DISTINCT confrontos_itens.fk_layoutimp::text, ',' ORDER BY confrontos_itens.fk_layoutimp::text) AS layouts
+                FROM confrontos_itens
+                JOIN scoped_confrontos ON scoped_confrontos.pk = confrontos_itens.fk_confrontos
+                WHERE confrontos_itens.tipo = 'B'
+                GROUP BY confrontos_itens.fk_confrontos
+            )
             SELECT
-                confrontos.pk                   AS legacy_id,
-                confrontos.fk_empresa           AS legacy_company_id,
+                scoped_confrontos.pk                   AS legacy_id,
+                scoped_confrontos.fk_empresa           AS legacy_company_id,
                 usuarios.pk                     AS legacy_user_create_id,
                 descricao                       AS "description",
                 criado_por                      AS user_create,
@@ -52,31 +83,20 @@ class ConfrontationSource extends AbstractLegacySource
                 check_cd                        AS consider_debit_credit,
                 check_numdocumento              AS consider_document,
                 ignorar_duplicados              AS ignore_equals,
-                confrontos.created_at,
+                scoped_confrontos.created_at,
                 CASE 
-                    WHEN confrontos.fk_layout_empresa IS NOT NULL THEN 'completed' 
+                    WHEN scoped_confrontos.fk_layout_empresa IS NOT NULL THEN 'completed' 
                     ELSE 'pending'
                 END                             AS "status",
-                confrontos.fk_layout_empresa    AS finished_on,
-                rec_fin.fk_layoutimp ||
-                ' <=> ' ||
-                rec_ban.fk_layoutimp            AS layouts,
-                COUNT(DISTINCT rec_fin.pk) 
-                || ' / ' 
-                || COUNT(DISTINCT rec_ban.pk)   AS entries					 
-            FROM confrontos
-            JOIN confrontos_itens rec_fin ON confrontos.pk = rec_fin.fk_confrontos AND rec_fin.tipo = 'F'
-            JOIN confrontos_itens rec_ban ON confrontos.pk = rec_ban.fk_confrontos AND rec_ban.tipo = 'B'
-            JOIN empresas ON empresas.pk = confrontos.fk_empresa
+                scoped_confrontos.fk_layout_empresa    AS finished_on,
+                rec_fin.layouts || ' <=> ' || rec_ban.layouts AS layouts,
+                rec_fin.entries_count || ' / ' || rec_ban.entries_count AS entries
+            FROM scoped_confrontos
+            JOIN rec_fin ON scoped_confrontos.pk = rec_fin.fk_confrontos
+            JOIN rec_ban ON scoped_confrontos.pk = rec_ban.fk_confrontos
+            JOIN empresas ON empresas.pk = scoped_confrontos.fk_empresa
             LEFT JOIN usuarios ON usuarios.nome = criado_por
-            WHERE confrontos.created_at > NOW() - INTERVAL '60 days'
-              AND confrontos.pk > COALESCE(
-                  CAST(NULLIF(:last_id, '') AS UUID),
-                  '00000000-0000-0000-0000-000000000000'::UUID
-                )
-            GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
-            ORDER BY confrontos.pk ASC
-            LIMIT :limit
+            ORDER BY scoped_confrontos.pk ASC
         SQL;
     }
 

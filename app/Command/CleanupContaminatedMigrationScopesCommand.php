@@ -302,11 +302,28 @@ class CleanupContaminatedMigrationScopesCommand extends HyperfCommand
         $affected = 0;
 
         foreach (array_chunk($ids, 1000) as $chunk) {
-            $query = Db::connection('conciliador_web')
-                ->table($table)
-                ->whereIn('id', $chunk);
+            $connection = Db::connection('conciliador_web');
+            $query = $connection->table($table)->whereIn('id', $chunk);
 
-            $affected += $execute ? (int) $query->delete() : (int) $query->count();
+            if (! $execute) {
+                $affected += (int) $query->count();
+                continue;
+            }
+
+            if (! in_array($table, ['import_records', 'rules'], true)) {
+                $affected += (int) $query->delete();
+                continue;
+            }
+
+            $connection->beginTransaction();
+            try {
+                $connection->statement("SET LOCAL session_replication_role = 'replica'");
+                $affected += (int) $query->delete();
+                $connection->commit();
+            } catch (\Throwable $e) {
+                $connection->rollBack();
+                throw $e;
+            }
         }
 
         return $affected;

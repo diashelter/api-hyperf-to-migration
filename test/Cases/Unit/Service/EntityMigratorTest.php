@@ -229,6 +229,47 @@ final class EntityMigratorTest extends UnitTestCase
         $this->assertFalse($method->invoke($migrator, 100.0, 0, 1000.0));
     }
 
+    public function testMappingsForSuccessfulInsertsKeepsOnlyRecordsFromSuccessfulChunks(): void
+    {
+        $method = new ReflectionMethod(EntityMigrator::class, 'mappingsForSuccessfulInserts');
+        $migrator = new EntityMigrator();
+
+        $mappings = [
+            'legacy-1' => 'new-1',
+            'legacy-2' => 'new-2',
+            'legacy-3' => 'new-3',
+        ];
+        $insertResult = [
+            'inserted' => 2,
+            'failed' => 1,
+            'successful_record_ids' => ['new-1', 'new-3'],
+        ];
+
+        $this->assertSame(
+            [
+                'legacy-1' => 'new-1',
+                'legacy-3' => 'new-3',
+            ],
+            $method->invoke($migrator, $mappings, $insertResult)
+        );
+    }
+
+    public function testMappingsForSuccessfulInsertsKeepsAllMappingsWhenBatchFullyInserted(): void
+    {
+        $method = new ReflectionMethod(EntityMigrator::class, 'mappingsForSuccessfulInserts');
+        $migrator = new EntityMigrator();
+
+        $mappings = [
+            'legacy-1' => 'new-1',
+            'legacy-2' => 'new-2',
+        ];
+
+        $this->assertSame(
+            $mappings,
+            $method->invoke($migrator, $mappings, ['inserted' => 2, 'failed' => 0])
+        );
+    }
+
     /**
      * @param array<int, array<string, mixed>> $records
      * @return array{0: array<int, array<string, mixed>>, 1: int}

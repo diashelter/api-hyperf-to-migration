@@ -60,6 +60,7 @@ class RuleSource extends AbstractLegacySource
             SELECT COUNT(*) AS count
             FROM regras
             JOIN layout_empresa ON regras.fk_layout_empresa = layout_empresa.pk
+            JOIN layout ON layout.pk = layout_empresa.fk_layoutimp AND layout.visivel = 1 AND layout.tipo = 'IMP'
             WHERE fk_layoutimp <> 0
         SQL;
     }
@@ -71,34 +72,35 @@ class RuleSource extends AbstractLegacySource
                 regras.id                                              AS legacy_id,
                 layout_empresa.fk_empresa                              AS legacy_company_id,
                 layout_empresa.fk_layoutimp                            AS legacy_layout_id,
-                CASE cd WHEN 'C' THEN 'C' ELSE 'D' END                 AS debit_credit,
-                REGEXP_REPLACE(cpfcnpj , '[^0-9]', '', 'g')            AS cpf_cnpj,
-                clifor                                                 AS client_supplier,
-                historico                                              AS history,
-                banco                                                  AS bank,
-                filial                                                 AS filial,
-                infadicional                                           AS additional_information,
-                infadicional_compl                                     AS additional_information_3,
-                token                                                  AS token,
-                exclusivo                                              AS "exclusive",
-                idhistorico                                            AS id_history,
-                iddebito                                               AS id_debit,
-                idcredito                                              AS id_credit,
-                historicoexp                                           AS id_history_exp,
-                idcccredito                                            AS id_cc_credit,
-                idccdebito                                             AS id_cc_debit,
-                reprocessar                                            AS reprocess,
-                invalida                                               AS invalid,
-                historico_imp                                          AS history_value,
-                cpfcnpj_imp                                            AS cpf_cnpj_value,
-                clifor_imp                                             AS client_supplier_value,
-                banco_imp                                              AS bank_value,
-                filial_imp                                             AS filial_value,
-                infadicional_imp                                       AS additional_information_value,
-                infadicional_compl_imp                                 AS additional_information_3_value,
-                idparticipante                                         AS third_party_participant
+                CASE regras.cd WHEN 'C' THEN 'C' ELSE 'D' END          AS debit_credit,
+                REGEXP_REPLACE(regras.cpfcnpj , '[^0-9]', '', 'g')     AS cpf_cnpj,
+                regras.clifor                                          AS client_supplier,
+                regras.historico                                       AS history,
+                regras.banco                                           AS bank,
+                regras.filial                                          AS filial,
+                regras.infadicional                                    AS additional_information,
+                regras.infadicional_compl                              AS additional_information_3,
+                regras.token                                           AS token,
+                regras.exclusivo                                       AS "exclusive",
+                regras.idhistorico                                     AS id_history,
+                regras.iddebito                                        AS id_debit,
+                regras.idcredito                                       AS id_credit,
+                regras.historicoexp                                    AS id_history_exp,
+                regras.idcccredito                                     AS id_cc_credit,
+                regras.idccdebito                                      AS id_cc_debit,
+                regras.reprocessar                                     AS reprocess,
+                regras.invalida                                        AS invalid,
+                regras.historico_imp                                   AS history_value,
+                regras.cpfcnpj_imp                                     AS cpf_cnpj_value,
+                regras.clifor_imp                                      AS client_supplier_value,
+                regras.banco_imp                                       AS bank_value,
+                regras.filial_imp                                      AS filial_value,
+                regras.infadicional_imp                                AS additional_information_value,
+                regras.infadicional_compl_imp                          AS additional_information_3_value,
+                regras.idparticipante                                  AS third_party_participant
             FROM regras
             JOIN layout_empresa ON regras.fk_layout_empresa = layout_empresa.pk
+            JOIN layout ON layout.pk = layout_empresa.fk_layoutimp AND layout.visivel = 1 AND layout.tipo = 'IMP'
             WHERE fk_layoutimp <> 0
               AND regras.id > COALESCE(
                 CAST(NULLIF(:last_id, '') AS UUID),

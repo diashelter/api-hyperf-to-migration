@@ -281,8 +281,9 @@ class EntityMigrator
                                 $totals['error_message'] = $result['errors'][0]['message'] ?? 'unknown insert error';
                             }
 
-                            if (! empty($idMappings) && $result['inserted'] > 0) {
-                                $this->idMappingService->storeBatch($entity, $idMappings, $contractId, $jobId);
+                            $insertedMappings = $this->mappingsForSuccessfulInserts($idMappings, $result);
+                            if (! empty($insertedMappings)) {
+                                $this->idMappingService->storeBatch($entity, $insertedMappings, $contractId, $jobId);
                             }
                         }
 
@@ -329,6 +330,38 @@ class EntityMigrator
         $this->jobService->incrementTotals($jobId, $deltaInserted, $deltaFailed, $deltaSkipped);
 
         return $totals;
+    }
+
+    /**
+     * @param array<string, string> $idMappings legacy_id => new_id
+     * @param array<string, mixed> $insertResult
+     * @return array<string, string>
+     */
+    private function mappingsForSuccessfulInserts(array $idMappings, array $insertResult): array
+    {
+        if (empty($idMappings) || (int) ($insertResult['inserted'] ?? 0) <= 0) {
+            return [];
+        }
+
+        if ((int) ($insertResult['failed'] ?? 0) === 0) {
+            return $idMappings;
+        }
+
+        $successfulIds = array_filter(array_map(
+            static fn (mixed $id): string => (string) $id,
+            (array) ($insertResult['successful_record_ids'] ?? [])
+        ));
+
+        if (empty($successfulIds)) {
+            return [];
+        }
+
+        $successful = array_fill_keys($successfulIds, true);
+
+        return array_filter(
+            $idMappings,
+            static fn (string $newId): bool => isset($successful[$newId])
+        );
     }
 
     /**
