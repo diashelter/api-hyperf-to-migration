@@ -58,7 +58,8 @@ class UserSource extends AbstractLegacySource
                 nome AS name,
                 TRIM(email) AS email,
                 senha AS password,
-                CASE inativo WHEN true THEN false ELSE true END AS status
+                CASE inativo WHEN true THEN false ELSE true END AS status,
+                COALESCE(usuario, nome) AS accounting_system_login
             FROM usuarios
             WHERE email <> 'suporte@integradorcontabil.net.br'
         SQL;
@@ -73,7 +74,7 @@ class UserSource extends AbstractLegacySource
     {
         $rows = Db::connection($connection)->select($this->sql());
 
-        return array_map(static fn ($r) => (array) $r, $rows);
+        return array_map(static fn($r) => (array) $r, $rows);
     }
 
     public function validationRules(): array
