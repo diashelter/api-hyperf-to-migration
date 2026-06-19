@@ -280,7 +280,41 @@ class LegacyDuplicateValidationService
      */
     private function layoutRules(): array
     {
+        $importsLayoutsAdmin = Db::connection('conciliador_web')->table('layouts_admin')->where('type', 'imp')->get(['code', 'id'])->keyBy('code');
+        $stringifiedCodes = implode(',', $importsLayoutsAdmin->keys()->map(fn($code) => (int) $code)->toArray());
+        $exportsLayoutsAdmin = Db::connection('conciliador_web')->table('layouts_admin')->where('type', 'exp')->get(['code', 'id'])->keyBy('code');
+        $stringifiedExportCodes = implode(',', $exportsLayoutsAdmin->keys()->map(fn($code) => (int) $code)->toArray());
+
         return [
+            $this->buildInvalidRowsRule(
+                entity: 'layouts',
+                table: 'layout',
+                rule: 'missing_layouts_imp_in_ccweb',
+                field: 'code',
+                invalidRowsSql: <<<SQL
+                   SELECT layout.pk || '-' ||nome AS value, COALESCE(layout.pk::text, '') AS legacy_id
+                    FROM public.layout
+                    JOIN layout_empresa ON layout.pk = layout_empresa.fk_layoutimp
+                    WHERE layout.tipo = 'IMP'
+                      AND layout.pk NOT IN ({$stringifiedCodes})
+                      AND (layout.pk < 1000 OR layout.pk > 5000)
+                      GROUP BY 1,2
+                SQL
+            ),
+            $this->buildInvalidRowsRule(
+                entity: 'layouts',
+                table: 'layout',
+                rule: 'missing_layouts_exp_in_ccweb',
+                field: 'code',
+                invalidRowsSql: <<<SQL
+                    SELECT layout.pk || '-' ||nome AS value, COALESCE(layout.pk::text, '') AS legacy_id
+                    FROM public.layout
+                    JOIN layout_empresa ON layout.pk = layout_empresa.fk_layoutexp
+                    WHERE layout.tipo = 'EXP'
+                      AND layout.pk NOT IN ({$stringifiedExportCodes})
+                      GROUP BY 1,2
+                SQL
+            ),
             $this->buildInvalidRowsRule(
                 entity: 'layouts',
                 table: 'layout',
@@ -330,7 +364,7 @@ class LegacyDuplicateValidationService
                 rule: 'duplicate_code',
                 field: 'code',
                 duplicateExpression: 'layout.pk::text',
-                tableExpression: 'public.layout JOIN layout_empresa ON layout.pk = layout_empresa.fk_layoutimp',
+                tableExpression: 'public.layout',
                 whereClause: "visivel = 1 AND tipo = 'IMP'",
                 legacyIdsExpression: "COALESCE(layout.pk::text, '')"
             ),
