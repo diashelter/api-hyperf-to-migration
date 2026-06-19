@@ -75,11 +75,12 @@ class MigrationOrchestrator
 
         $this->jobService->markProcessing($jobId);
 
-        try {
-            $this->exportLayoutSyncService->sync($legacyConnection, $contractId);
-        } catch (Throwable $e) {
-            $this->logger->warning("[job {$jobId}] export layout sync failed (non-fatal): " . $e->getMessage());
-        }
+        // Desabilitado migração dos layouts de exportação por enquanto, deve ser validados manualmente antes da migração
+        // try {
+        //     $this->exportLayoutSyncService->sync($legacyConnection, $contractId);
+        // } catch (Throwable $e) {
+        //     $this->logger->warning("[job {$jobId}] export layout sync failed (non-fatal): " . $e->getMessage());
+        // }
 
         $errorSummary = [];
 
