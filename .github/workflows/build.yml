@@ -16,11 +16,7 @@ jobs:
           username: guilhermemrt
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Create .env
-        run: |
-          cat <<EOF > .env
-            ${{ secrets.ENV_PROD_TEXT }}
-          EOF
+  
       - name: build and push docker image to registry
         uses: docker/build-push-action@v5
         with:
