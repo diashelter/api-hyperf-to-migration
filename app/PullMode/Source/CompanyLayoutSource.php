@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 namespace App\PullMode\Source;
 
+use App\Service\LookupCacheService;
+use Hyperf\Di\Annotation\Inject;
+
 /**
  * Source legada → `company_layout`. FKs: companies, layouts.
  *
@@ -19,6 +22,10 @@ namespace App\PullMode\Source;
  */
 class CompanyLayoutSource extends AbstractLegacySource
 {
+        
+    #[Inject]
+    protected LookupCacheService $lookupCacheService;
+
     public function entity(): string
     {
         return 'company_layout';
@@ -34,7 +41,6 @@ class CompanyLayoutSource extends AbstractLegacySource
         return [
             'legacy_company_id' => 'companies',
             'legacy_layout_imp' => 'layouts',
-            'legacy_layout_exp' => 'layouts_admin',
         ];
     }
 
@@ -85,5 +91,15 @@ class CompanyLayoutSource extends AbstractLegacySource
             'debit_account' => 'nullable|string|max:20',
             'account_fixed' => 'nullable|boolean',
         ];
+    }
+
+     public function transformRow(array $row, string $_contractId): array
+    {
+
+        if (isset($row['legacy_layout_exp'])) {
+            $row['layout_exp'] = $this->lookupCacheService->resolve('layouts_admin', $row['legacy_layout_exp']);
+        }
+        unset($row['legacy_layout_exp']);
+        return $row;
     }
 }
