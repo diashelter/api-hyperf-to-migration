@@ -124,7 +124,9 @@ class RuleSource extends AbstractLegacySource
         $row['token'] = $this->parseTokenToWeb($row['token'], $resolvedLayoutId ?? null);
         $row['cpf_cnpj'] = $this->replaceValuesWithNullIf($row, 'cpf_cnpj', 'field_cpfcnpj');
         $row['client_supplier'] = $this->replaceValuesWithNullIf($row, 'client_supplier', 'field_clifor');
-        $row['history'] = $this->replaceValuesWithNullIf($row, 'history', 'fnc_semelhante');
+        if (isset($row['history']) && $row['history'] !== '') {
+            $row['history'] = str_replace('fnc_semelhante(', 'fnc_similar(', $row['history']);
+        }
         $row['history'] = $this->replaceValuesWithNullIf($row, 'history', 'field_historico');
         $row['bank'] = $this->replaceValuesWithNullIf($row, 'bank', 'field_banco');
         $row['filial'] = $this->replaceValuesWithNullIf($row, 'filial', 'field_filial');
