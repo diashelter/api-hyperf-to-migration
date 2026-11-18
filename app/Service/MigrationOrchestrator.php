@@ -36,6 +36,9 @@ class MigrationOrchestrator
     #[Inject]
     protected ContractCompanyCountSyncService $contractCompanyCountSyncService;
 
+    #[Inject]
+    protected ContractModulesSyncService $contractModulesSyncService;
+
     private LoggerInterface $logger;
 
     private ContainerInterface $container;
@@ -141,7 +144,17 @@ class MigrationOrchestrator
             }
         }
 
-        if (empty($errorSummary)) {
+        $entitiesHadErrors = $errorSummary !== [];
+
+        // Roda sempre que `contracts` teve sucesso (senão o job já foi abortado acima), mesmo com erro em outras entidades.
+        try {
+            $this->contractModulesSyncService->sync($contractId);
+        } catch (Throwable $e) {
+            $errorSummary['contract_modules'] = $e->getMessage();
+            $this->logger->error("[job {$jobId}] contract modules sync failed: " . $e->getMessage());
+        }
+
+        if (! $entitiesHadErrors) {
             try {
                 $this->contractCompanyCountSyncService->sync($contractId);
             } catch (Throwable $e) {

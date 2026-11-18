@@ -185,13 +185,21 @@ Redis async-queue
   |    - carrega status do job
   |    - conecta no legado
   |    - markProcessing()
-  |    - ExportLayoutSyncService::sync()
+  |    - (ExportLayoutSyncService::sync() desligado: layouts de exportação validados manualmente)
   |    - percorre EntityMetadataRegistry::sources()
   |    - atualiza current_entity
   |    - chama EntityMigrator::migrate()
   |    - continua mesmo quando uma entidade falha
+  |    - ContractModulesSyncService::sync()      (sempre que `contracts` teve sucesso)
+  |    - ContractCompanyCountSyncService::sync() (só sem erro nas entidades)
   |    - markCompleted() ou completed_with_errors
 ```
+
+Passos pós-loop (falha de qualquer um vira `error_summary` e o job termina `completed_with_errors`; um não impede o outro):
+
+- `ContractModulesSyncService`: `POST {MANAGER_API_URL}/api/get-token?secret={MANAGER_SECRET}` → Bearer; `POST {MANAGER_API_URL}/api/clientes?cnpj=<99.999.999/9999-99>`; usa o item de `data[]` com `cnpj` igual (senão o primeiro). Timeout `MANAGER_API_TIMEOUT`. Erro em `error_summary['contract_modules']`, sem secret, token, CNPJ ou corpo da resposta.
+- Mapeamento num único `update` em `contracts`: `belvo` ∈ {`1`, `"1"`, `true`} → `has_open_finance_module = true`, senão `false`; `confronto == "Sim"` (trim, sem diferenciar maiúsculas) ou ausente/`null` → `has_confrontation_module = true`, outro valor → `false`. Cliente não retornado (`api_status != 1`, `data` vazio/não-lista) ou falha HTTP → nenhum `update` (vale o default da coluna).
+- `ContractCompanyCountSyncService`: `GET {MANAGER_API_BASE_URL}/api/public/clientes/cnpj` → `company_count`; erro em `error_summary['contract_company_count']`.
 
 Configuração da fila:
 

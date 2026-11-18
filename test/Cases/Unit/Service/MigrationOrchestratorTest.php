@@ -15,6 +15,7 @@ namespace HyperfTest\Cases\Unit\Service;
 use App\PullMode\Source\AbstractLegacySource;
 use App\PullMode\Source\ContractSource;
 use App\Service\ContractCompanyCountSyncService;
+use App\Service\ContractModulesSyncService;
 use App\Service\EntityMetadataRegistry;
 use App\Service\EntityMigrator;
 use App\Service\ExportLayoutSyncService;
@@ -81,10 +82,9 @@ final class MigrationOrchestratorTest extends UnitTestCase
             ->with('cont_arenasolucoes')
             ->andReturn('legacy_connection');
 
+        // O sync de layouts de exportação está desligado no orquestrador (validados manualmente antes da migração).
         $exportLayoutSyncService = Mockery::mock(ExportLayoutSyncService::class);
-        $exportLayoutSyncService->shouldReceive('sync')
-            ->once()
-            ->with('legacy_connection', 'cont_arenasolucoes');
+        $exportLayoutSyncService->shouldNotReceive('sync');
 
         $entityMigrator = Mockery::mock(EntityMigrator::class);
         $entityMigrator->shouldReceive('migrate')
@@ -98,11 +98,18 @@ final class MigrationOrchestratorTest extends UnitTestCase
                 'error_message' => 'SQLSTATE[08006] [7] could not send SSL negotiation packet: Resource temporarily unavailable',
             ]);
 
+        $companyCountSyncService = Mockery::mock(ContractCompanyCountSyncService::class);
+        $companyCountSyncService->shouldNotReceive('sync');
+        $modulesSyncService = Mockery::mock(ContractModulesSyncService::class);
+        $modulesSyncService->shouldNotReceive('sync');
+
         $orchestrator = new MigrationOrchestrator($loggerFactory, $container);
         $this->injectProperty($orchestrator, 'jobService', $jobService);
         $this->injectProperty($orchestrator, 'legacyConnectionFactory', $legacyConnectionFactory);
         $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
         $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
+        $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $modulesSyncService);
 
         $orchestrator->run('job-1');
         $this->addToAssertionCount(1);
@@ -124,6 +131,7 @@ final class MigrationOrchestratorTest extends UnitTestCase
         $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
         $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
         $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $this->createSuccessfulModulesSyncService());
 
         $orchestrator->run('job-1');
         $this->addToAssertionCount(1);
@@ -157,6 +165,7 @@ final class MigrationOrchestratorTest extends UnitTestCase
         $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
         $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
         $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $this->createSuccessfulModulesSyncService());
 
         $orchestrator->run('job-1');
         $this->addToAssertionCount(1);
@@ -187,9 +196,148 @@ final class MigrationOrchestratorTest extends UnitTestCase
         $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
         $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
         $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $this->createSuccessfulModulesSyncService());
 
         $orchestrator->run('job-1');
         $this->addToAssertionCount(1);
+    }
+
+    public function testRunSyncsContractModulesWhenAllEntitiesCompleteWithoutErrors(): void
+    {
+        [$loggerFactory, $container, $jobService, $legacyConnectionFactory, $exportLayoutSyncService, $entityMigrator]
+            = $this->createSuccessfulRunDependencies();
+
+        $modulesSyncService = Mockery::mock(ContractModulesSyncService::class);
+        $modulesSyncService->shouldReceive('sync')->once()->with('cont_arenasolucoes');
+
+        $companyCountSyncService = Mockery::mock(ContractCompanyCountSyncService::class);
+        $companyCountSyncService->shouldReceive('sync')->once()->with('cont_arenasolucoes');
+
+        $jobService->shouldReceive('markCompleted')->once()->with('job-1', null);
+
+        $orchestrator = new MigrationOrchestrator($loggerFactory, $container);
+        $this->injectProperty($orchestrator, 'jobService', $jobService);
+        $this->injectProperty($orchestrator, 'legacyConnectionFactory', $legacyConnectionFactory);
+        $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
+        $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
+        $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $modulesSyncService);
+
+        $orchestrator->run('job-1');
+        $this->addToAssertionCount(1);
+    }
+
+    public function testRunSyncsContractModulesEvenWhenAnEntityCompletesWithErrors(): void
+    {
+        [$loggerFactory, $container, $jobService, $legacyConnectionFactory, $exportLayoutSyncService, $entityMigrator]
+            = $this->createSuccessfulRunDependencies([
+                'users' => [
+                    'status' => 'completed_with_errors',
+                    'inserted' => 1,
+                    'failed' => 1,
+                    'skipped' => 0,
+                    'error_message' => 'one user failed',
+                ],
+            ]);
+
+        $modulesSyncService = Mockery::mock(ContractModulesSyncService::class);
+        $modulesSyncService->shouldReceive('sync')->once()->with('cont_arenasolucoes');
+
+        $companyCountSyncService = Mockery::mock(ContractCompanyCountSyncService::class);
+        $companyCountSyncService->shouldNotReceive('sync');
+
+        $jobService->shouldReceive('markFailed')->never();
+        $jobService->shouldReceive('markCompleted')
+            ->once()
+            ->with('job-1', ['users' => 'one user failed']);
+
+        $orchestrator = new MigrationOrchestrator($loggerFactory, $container);
+        $this->injectProperty($orchestrator, 'jobService', $jobService);
+        $this->injectProperty($orchestrator, 'legacyConnectionFactory', $legacyConnectionFactory);
+        $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
+        $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
+        $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $modulesSyncService);
+
+        $orchestrator->run('job-1');
+        $this->addToAssertionCount(1);
+    }
+
+    public function testRunMarksCompletedWithErrorsWhenContractModulesSyncFails(): void
+    {
+        [$loggerFactory, $container, $jobService, $legacyConnectionFactory, $exportLayoutSyncService, $entityMigrator]
+            = $this->createSuccessfulRunDependencies();
+
+        $modulesSyncService = Mockery::mock(ContractModulesSyncService::class);
+        $modulesSyncService->shouldReceive('sync')
+            ->once()
+            ->with('cont_arenasolucoes')
+            ->andThrow(new RuntimeException('Manager API did not return the client.'));
+
+        $companyCountSyncService = Mockery::mock(ContractCompanyCountSyncService::class);
+        $companyCountSyncService->shouldReceive('sync')->once()->with('cont_arenasolucoes');
+
+        $jobService->shouldReceive('markFailed')->never();
+        $jobService->shouldReceive('markCompleted')
+            ->once()
+            ->with('job-1', ['contract_modules' => 'Manager API did not return the client.']);
+
+        $orchestrator = new MigrationOrchestrator($loggerFactory, $container);
+        $this->injectProperty($orchestrator, 'jobService', $jobService);
+        $this->injectProperty($orchestrator, 'legacyConnectionFactory', $legacyConnectionFactory);
+        $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
+        $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
+        $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $modulesSyncService);
+
+        $orchestrator->run('job-1');
+        $this->addToAssertionCount(1);
+    }
+
+    public function testRunStillSyncsCompanyCountWhenContractModulesSyncFails(): void
+    {
+        [$loggerFactory, $container, $jobService, $legacyConnectionFactory, $exportLayoutSyncService, $entityMigrator]
+            = $this->createSuccessfulRunDependencies();
+
+        $modulesSyncService = Mockery::mock(ContractModulesSyncService::class);
+        $modulesSyncService->shouldReceive('sync')
+            ->once()
+            ->with('cont_arenasolucoes')
+            ->andThrow(new RuntimeException('Manager API returned HTTP 500 on client request.'));
+
+        // Os dois passos são independentes: a falha nos módulos não impede o company_count, e as duas falhas são registradas.
+        $companyCountSyncService = Mockery::mock(ContractCompanyCountSyncService::class);
+        $companyCountSyncService->shouldReceive('sync')
+            ->once()
+            ->with('cont_arenasolucoes')
+            ->andThrow(new RuntimeException('Manager API returned HTTP 404 while fetching company_count.'));
+
+        $jobService->shouldReceive('markFailed')->never();
+        $jobService->shouldReceive('markCompleted')
+            ->once()
+            ->with('job-1', [
+                'contract_modules' => 'Manager API returned HTTP 500 on client request.',
+                'contract_company_count' => 'Manager API returned HTTP 404 while fetching company_count.',
+            ]);
+
+        $orchestrator = new MigrationOrchestrator($loggerFactory, $container);
+        $this->injectProperty($orchestrator, 'jobService', $jobService);
+        $this->injectProperty($orchestrator, 'legacyConnectionFactory', $legacyConnectionFactory);
+        $this->injectProperty($orchestrator, 'exportLayoutSyncService', $exportLayoutSyncService);
+        $this->injectProperty($orchestrator, 'entityMigrator', $entityMigrator);
+        $this->injectProperty($orchestrator, 'contractCompanyCountSyncService', $companyCountSyncService);
+        $this->injectProperty($orchestrator, 'contractModulesSyncService', $modulesSyncService);
+
+        $orchestrator->run('job-1');
+        $this->addToAssertionCount(1);
+    }
+
+    private function createSuccessfulModulesSyncService(): ContractModulesSyncService
+    {
+        $modulesSyncService = Mockery::mock(ContractModulesSyncService::class);
+        $modulesSyncService->shouldReceive('sync')->once()->with('cont_arenasolucoes');
+
+        return $modulesSyncService;
     }
 
     /**
@@ -240,10 +388,9 @@ final class MigrationOrchestratorTest extends UnitTestCase
             ->with('cont_arenasolucoes')
             ->andReturn('legacy_connection');
 
+        // O sync de layouts de exportação está desligado no orquestrador (validados manualmente antes da migração).
         $exportLayoutSyncService = Mockery::mock(ExportLayoutSyncService::class);
-        $exportLayoutSyncService->shouldReceive('sync')
-            ->once()
-            ->with('legacy_connection', 'cont_arenasolucoes');
+        $exportLayoutSyncService->shouldNotReceive('sync');
 
         $entityMigrator = Mockery::mock(EntityMigrator::class);
         foreach ($sourcesByClass as $source) {
