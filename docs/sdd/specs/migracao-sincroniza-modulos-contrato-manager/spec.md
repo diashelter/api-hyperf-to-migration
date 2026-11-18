@@ -127,12 +127,12 @@ nem afete o `company_count`.
   `update` (senão um "não encontrado" gravaria as duas flags `false`).
 - **RF5.** Falha (token não obtido, rede, timeout, HTTP não 2xx, JSON inválido, resposta sem cliente
   conforme RF4, contrato sem mapeamento ou sem CNPJ válido)
-  não interrompe a migração: vira `error_summary['contract_modules']` com a mensagem, e o job
+  não interrompe a migração: vira `error_summary['manager_integration']` com a mensagem, e o job
   termina `completed_with_errors`.
-- **RF6.** O passo é independente do sync de `company_count`: a falha de um não impede o outro.
+- **RF6.** ~~O passo é independente do sync de `company_count`: a falha de um não impede o outro.~~ (revisto em 2026-11-18: `company_count` centralizado — ver D1b): o mesmo passo grava `company_count` a partir de `empresas_contr`; `empresas_contr` ausente ou não numérico grava só os módulos, mantém o `company_count` e vira erro em `error_summary['manager_integration']`.
 - **RF7.** Idempotente: rodar de novo (retomada do job) produz o mesmo estado, sem efeitos extras.
-- **RF8.** Comportamento atual preservado: `ContractCompanyCountSyncService` e sua regra (só roda
-  quando nenhuma entidade teve erro) não mudam; os 4 testes de `MigrationOrchestratorTest` seguem
+- **RF8.** (revisto em 2026-11-18: `company_count` centralizado — ver D1b) ~~Comportamento atual preservado: `ContractCompanyCountSyncService` e sua regra (só roda
+  quando nenhuma entidade teve erro) não mudam;~~ os 4 testes de `MigrationOrchestratorTest` seguem
   verdes sem mudar de significado.
 
 ### Não-funcionais
@@ -174,6 +174,14 @@ nem afete o `company_count`.
   Adicionar `MANAGER_API_URL` e `MANAGER_SECRET` (vazio) ao `.env.example` do hyperf.
 - Alternativa descartada (2026-11-17, Q1): estender `ContractCompanyCountSyncService` — o endpoint
   é o novo (`/api/clientes`), não o `/api/public/clientes/cnpj` atual.
+- **D1b (2026-11-18, pedido do usuário).** `empresas_contr` vem na mesma resposta de `/api/clientes`:
+  `ContractModulesSyncService::resolveModules()` passa a devolver também `company_count` e o mesmo `update`
+  grava os três campos. `ContractCompanyCountSyncService` (e seu teste) e a env `MANAGER_API_BASE_URL` foram
+  removidos; o `company_count` passa a seguir a regra dos módulos (roda sempre que `contracts` teve sucesso,
+  não só sem erro nas entidades) e sua falha fica em `error_summary['manager_integration']`
+  (a chave `contract_company_count` deixa de existir).
+- **D1c (2026-11-18, pedido do usuário).** A chave de erro do passo passa de `contract_modules` para
+  `manager_integration` (log: `manager integration failed`); todas as referências desta spec já usam o nome novo.
 - Erros em `RuntimeException` com mensagem curta em inglês (padrão do arquivo irmão), sem corpo da
   resposta (nem trecho — RNF2b) e sem a mensagem crua do Guzzle (traz a URL com o secret — RNF2).
   Diferente do `DatabaseConnectionService::summarizeBody` do conciliadorweb, que loga 500 caracteres.
@@ -183,7 +191,7 @@ nem afete o `company_count`.
 - Injetar `#[Inject] protected ContractModulesSyncService $contractModulesSyncService;` em
   `MigrationOrchestrator`.
 - Chamar em `try/catch` próprio, separado do `company_count`, gravando
-  `$errorSummary['contract_modules']` na falha, antes de `markCompleted` (`MigrationOrchestrator.php:153`).
+  `$errorSummary['manager_integration']` na falha, antes de `markCompleted` (`MigrationOrchestrator.php:153`).
 - Condição (Q4): basta `contracts` ter sucesso. Como falha em `contracts` já retorna antes
   (`MigrationOrchestrator.php:121-126` e `:135-140`), chegar ao fim do loop garante isso — inclusive
   na retomada, em que `contracts` é pulada por já estar `completed` (`:93-95`). Logo, o passo roda
@@ -201,7 +209,7 @@ nem afete o `company_count`.
 
 - Bloquear ou liberar módulos no painel App do conciliadorweb a partir das flags.
 - Backfill dos contratos já migrados (Q5: não precisa).
-- Mudar o sync de `company_count` ou o endpoint que ele usa.
+- ~~Mudar o sync de `company_count` ou o endpoint que ele usa.~~ (revisto em 2026-11-18: `company_count` centralizado — ver D1b).
 - Notificação específica no Discord para esse passo (o `error_summary` já aparece no painel Admin).
 
 ## Critérios de aceite
@@ -218,13 +226,14 @@ nem afete o `company_count`.
    fica com `has_confrontation_module = true`, do default).
 5. **CA5** (RF5). `MANAGER_SECRET` vazio, `get-token` sem `data.access_token`, HTTP 401/404/500,
    timeout, JSON inválido, contrato sem mapeamento, sem CNPJ ou com CNPJ ≠ 14 dígitos →
-   `RuntimeException`; no orquestrador, job `completed_with_errors` com `error_summary['contract_modules']`.
-6. **CA6** (RF1, RF6). Com uma entidade não-`contracts` em erro, o sync de módulos **roda** e o de
+   `RuntimeException`; no orquestrador, job `completed_with_errors` com `error_summary['manager_integration']`.
+6. **CA6** (RF1, RF6) (revisto em 2026-11-18: `company_count` centralizado — ver D1b): com uma entidade não-`contracts` em erro o passo roda e grava módulos +
+   `company_count`; `empresas_contr` inválido → módulos gravados e erro registrado. ~~Com uma entidade não-`contracts` em erro, o sync de módulos **roda** e o de
    `company_count` **não**; falha no sync de módulos não impede o `company_count` quando não há erro
-   nas entidades; com `contracts` em falha, nenhum dos dois roda.
+   nas entidades; com `contracts` em falha, nenhum dos dois roda.~~ Com `contracts` em falha, o passo não roda.
 7. **CA6b** (RF1). A chamada a `/api/clientes` leva `Authorization: Bearer <token do get-token>` e
    `cnpj=11.222.333/0001-81` (formatado) para `cpf_cnpj = 11222333000181`.
-8. **CA7** (RF8). Testes existentes de `ContractCompanyCountSyncServiceTest` e `MigrationOrchestratorTest`
+8. **CA7** (RF8) (revisto em 2026-11-18: `company_count` centralizado — ver D1b). Testes de `MigrationOrchestratorTest` (sem os casos do passo removido)
    verdes; `composer analyse` sem erros novos.
 9. **CA8** (RNF2, RNF2b). Nenhum secret/token nem dado do corpo da resposta (ex.: `email`, `telefone`
    fictícios do teste) aparece em mensagem de exceção ou log.

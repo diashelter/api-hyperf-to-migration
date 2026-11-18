@@ -52,6 +52,8 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
 
     private const PHONE = '11999990000';
 
+    private const COMPANY_COUNT = 62;
+
     /**
      * Chamadas feitas ao Client mockado: lista de [url, options].
      *
@@ -75,7 +77,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
 
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$this->client(['belvo' => 1, 'confronto' => 'Sim'])])],
-            ['has_open_finance_module' => true, 'has_confrontation_module' => true],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true, 'company_count' => self::COMPANY_COUNT],
             timeout: 2.5,
         );
 
@@ -100,7 +102,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
     {
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$this->client(['belvo' => 0, 'confronto' => 'Não'])])],
-            ['has_open_finance_module' => false, 'has_confrontation_module' => false],
+            ['has_open_finance_module' => false, 'has_confrontation_module' => false, 'company_count' => self::COMPANY_COUNT],
         );
 
         $service->sync(self::SCOPE);
@@ -112,7 +114,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
     {
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$this->client(['belvo' => $belvo, 'confronto' => $confronto])])],
-            ['has_open_finance_module' => true, 'has_confrontation_module' => true],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true, 'company_count' => self::COMPANY_COUNT],
         );
 
         $service->sync(self::SCOPE);
@@ -135,7 +137,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
     {
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$this->client($fields)])],
-            ['has_open_finance_module' => true, 'has_confrontation_module' => true],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true, 'company_count' => self::COMPANY_COUNT],
         );
 
         $service->sync(self::SCOPE);
@@ -157,7 +159,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
     {
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$this->client(['confronto' => 'Não'])])],
-            ['has_open_finance_module' => false, 'has_confrontation_module' => false],
+            ['has_open_finance_module' => false, 'has_confrontation_module' => false, 'company_count' => self::COMPANY_COUNT],
         );
 
         $service->sync(self::SCOPE);
@@ -166,12 +168,12 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
 
     public function testSyncUsesClientWhoseCnpjMatchesTheQueriedOne(): void
     {
-        $other = ['cnpj' => '99.888.777/0001-66', 'belvo' => 0, 'confronto' => 'Não', 'email' => 'outro@example.test'];
+        $other = ['cnpj' => '99.888.777/0001-66', 'belvo' => 0, 'confronto' => 'Não', 'empresas_contr' => 1, 'email' => 'outro@example.test'];
         $matching = $this->client(['belvo' => 1, 'confronto' => 'Sim']);
 
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$other, $matching])],
-            ['has_open_finance_module' => true, 'has_confrontation_module' => true],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true, 'company_count' => self::COMPANY_COUNT],
         );
 
         $service->sync(self::SCOPE);
@@ -180,16 +182,59 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
 
     public function testSyncFallsBackToFirstClientWhenNoCnpjMatches(): void
     {
-        $first = ['cnpj' => '99.888.777/0001-66', 'belvo' => 1, 'confronto' => 'Sim'];
-        $second = ['cnpj' => '55.444.333/0001-22', 'belvo' => 0, 'confronto' => 'Não'];
+        $first = ['cnpj' => '99.888.777/0001-66', 'belvo' => 1, 'confronto' => 'Sim', 'empresas_contr' => self::COMPANY_COUNT];
+        $second = ['cnpj' => '55.444.333/0001-22', 'belvo' => 0, 'confronto' => 'Não', 'empresas_contr' => 1];
 
         $service = $this->createService(
             [$this->tokenResponse(), $this->clientsResponse([$first, $second])],
-            ['has_open_finance_module' => true, 'has_confrontation_module' => true],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true, 'company_count' => self::COMPANY_COUNT],
         );
 
         $service->sync(self::SCOPE);
         $this->assertCount(2, $this->calls);
+    }
+
+    public function testSyncAcceptsCompanyCountAsNumericString(): void
+    {
+        $service = $this->createService(
+            [$this->tokenResponse(), $this->clientsResponse([$this->client(['belvo' => 1, 'confronto' => 'Sim', 'empresas_contr' => '62'])])],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true, 'company_count' => 62],
+        );
+
+        $service->sync(self::SCOPE);
+        $this->assertCount(2, $this->calls);
+    }
+
+    /**
+     * Os módulos são gravados mesmo assim; o company_count fica como está e o erro sobe para o error_summary.
+     *
+     * @param array<string, mixed> $fields
+     */
+    #[DataProvider('invalidCompanyCountProvider')]
+    public function testSyncUpdatesModulesButFailsWhenCompanyCountIsInvalid(array $fields): void
+    {
+        $client = $this->client(['belvo' => 1, 'confronto' => 'Sim']);
+        unset($client['empresas_contr']);
+
+        $service = $this->createService(
+            [$this->tokenResponse(), $this->clientsResponse([$client + $fields])],
+            ['has_open_finance_module' => true, 'has_confrontation_module' => true],
+        );
+
+        $this->assertSyncFailsWith($service, "Manager API field 'empresas_contr' must be numeric.");
+        $this->assertCount(2, $this->calls);
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>}>
+     */
+    public static function invalidCompanyCountProvider(): array
+    {
+        return [
+            'sem empresas_contr' => [[]],
+            'empresas_contr null' => [['empresas_contr' => null]],
+            'empresas_contr texto' => [['empresas_contr' => 'muitas']],
+        ];
     }
 
     #[DataProvider('clientNotReturnedProvider')]
@@ -383,7 +428,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
 
     /**
      * @param list<Response|Throwable> $responses respostas do Client na ordem das chamadas
-     * @param null|array<string, bool> $expectedUpdate null = update nunca chamado
+     * @param null|array<string, bool|int> $expectedUpdate null = update nunca chamado
      */
     private function createService(
         array $responses,
@@ -480,6 +525,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
      */
     private function client(array $fields): array
     {
-        return ['cnpj' => self::CNPJ_FORMATTED, 'email' => self::EMAIL, 'telefone' => self::PHONE] + $fields;
+        return ['cnpj' => self::CNPJ_FORMATTED, 'email' => self::EMAIL, 'telefone' => self::PHONE, 'empresas_contr' => self::COMPANY_COUNT]
+            + $fields;
     }
 }

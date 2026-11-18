@@ -40,7 +40,7 @@ chamado 0 — chamada comentada no orquestrador pelo commit `af7b59a`).
 - Testes: `vendor/bin/phpunit -c phpunit.unit.xml.dist test/Cases/Unit/Service/MigrationOrchestratorTest.php test/Cases/Unit/Service/ContractModulesSyncServiceTest.php test/Cases/Unit/Service/ContractCompanyCountSyncServiceTest.php`
   (via trava do orquestrador) → **OK (40 tests, 230 assertions)**: `MigrationOrchestratorTest` 8/8 (4 antigos com o
   mesmo significado + 4 novos), `ContractModulesSyncServiceTest` 27/27, `ContractCompanyCountSyncServiceTest` 5/5.
-- CAs no orquestrador: CA5 (falha nos módulos → `markCompleted` com `['contract_modules' => …]`, `markFailed` nunca),
+- CAs no orquestrador: CA5 (falha nos módulos → `markCompleted` com `['manager_integration' => …]`, `markFailed` nunca),
   CA6 (entidade `users` com erro → módulos sincronizam e `company_count` não; módulos falham sem erro nas entidades →
   `company_count` roda; `contracts` em falha → nenhum dos dois roda), CA7 (antigos verdes).
 - `composer analyse` → 1 erro, que já existia antes desta spec e está fora do escopo (decisão do orquestrador em
@@ -74,6 +74,13 @@ chamado 0 — chamada comentada no orquestrador pelo commit `af7b59a`).
 - `git diff` conferido de novo: nenhum valor de secret/token em arquivo versionado (`MANAGER_SECRET=` vazio no
   `.env.example`; só o placeholder `{MANAGER_SECRET}` em `docs/ai/architecture.md`).
 
+### T6 — `company_count` centralizado (2026-11-18)
+- `vendor/bin/phpunit -c phpunit.unit.xml.dist test/Cases/Unit/Service/ContractModulesSyncServiceTest.php test/Cases/Unit/Service/MigrationOrchestratorTest.php`
+  → OK (35 tests, 253 assertions): 31 do serviço (27 com `company_count` no `update` esperado + 4 novos) e 4 do orquestrador.
+- `composer analyse` → só o erro já existente em `config/autoload/async_queue.php:36`. `php-cs-fixer --dry-run` sem ajustes.
+- CA6/CA7 revistos (D1b): `ContractCompanyCountSyncServiceTest` removido junto com o serviço; a linha CA6/CA7 da tabela
+  abaixo descreve a rodada de T5, antes da centralização.
+
 #### Medições finais / resultado por CA
 
 | CA | Verificação | Resultado |
@@ -82,7 +89,7 @@ chamado 0 — chamada comentada no orquestrador pelo commit `af7b59a`).
 | CA2 | `belvo: 0` + `confronto: "Não"` → as duas `false` | passou |
 | CA3 | `belvo` `"1"`/`true`, `confronto` `"sim"`/`" Sim "` → `true` | passou |
 | CA4 | `confronto` ausente/`null` → `true`; `belvo` ausente → `false`; dois itens → o de `cnpj` igual (fallback `data[0]`); `api_status: 0`, `data: []`, sem `data`, `data` objeto → exceção sem `update` | passou |
-| CA5 | Serviço: secret ausente/vazio (sem HTTP), token ausente/vazio, HTTP 401/404/500, JSON inválido, `ConnectException`, sem mapping, `cpf_cnpj` nulo, 11 dígitos → `RuntimeException` sem `update`. Orquestrador: `completed_with_errors` com `error_summary['contract_modules']`, `markFailed` nunca | passou |
+| CA5 | Serviço: secret ausente/vazio (sem HTTP), token ausente/vazio, HTTP 401/404/500, JSON inválido, `ConnectException`, sem mapping, `cpf_cnpj` nulo, 11 dígitos → `RuntimeException` sem `update`. Orquestrador: `completed_with_errors` com `error_summary['manager_integration']`, `markFailed` nunca | passou |
 | CA6 | `MigrationOrchestratorTest`: entidade `users` com erro → módulos rodam, `company_count` não; módulos falham sem erro nas entidades → `company_count` roda; `contracts` em falha → nenhum dos dois | passou |
 | CA6b | Opções do `post`: `query.secret` do env no `get-token`; `query.cnpj = 11.222.333/0001-81` para `11222333000181`; `Authorization: Bearer token-fake` | passou |
 | CA7 | 4 testes antigos de `MigrationOrchestratorTest` e 5 de `ContractCompanyCountSyncServiceTest` verdes; `composer analyse` sem erros novos | passou |
@@ -97,7 +104,7 @@ chamado 0 — chamada comentada no orquestrador pelo commit `af7b59a`).
   1. A migration `2026_11_17_130000_add_unlimited_and_module_flags_to_contracts_table.php` (commit `5cd39241` do
      conciliadorweb, hoje só na branch `fix/upload-ofx-tipo-arquivo-invalido-importacao`) precisa estar aplicada no
      `conciliador_web` de produção **antes** do deploy deste hyperf; sem ela todo job termina `completed_with_errors`
-     com `error_summary['contract_modules']`.
+     com `error_summary['manager_integration']`.
   2. Configurar `MANAGER_API_URL` (padrão `https://manager.conciliadorcontabil.com.br`) e `MANAGER_SECRET` (mesmo do
      conciliadorweb) no ambiente do hyperf; `MANAGER_SECRET` vazio faz o passo falhar em todo job.
 - Fora do escopo: extensão `pgsql` quebrada na imagem do container (contorno do `.ini`) e o erro do `composer analyse`

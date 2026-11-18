@@ -24,9 +24,9 @@ use Throwable;
 use function Hyperf\Support\env;
 
 /**
- * Lê no Manager os módulos contratados pelo cliente (Open Finance / Confronto) e grava as flags
- * no contrato migrado. Mensagens de erro nunca levam secret, token, CNPJ nem trecho do corpo da
- * resposta (que traz dados pessoais).
+ * Lê no Manager, numa única chamada, os módulos contratados pelo cliente (Open Finance / Confronto)
+ * e a quantidade de empresas contratadas, e grava no contrato migrado. Mensagens de erro nunca levam
+ * secret, token, CNPJ nem trecho do corpo da resposta (que traz dados pessoais).
  */
 class ContractModulesSyncService
 {
@@ -66,12 +66,17 @@ class ContractModulesSyncService
 
         $token = $this->fetchToken($client, $baseUrl, $secret);
         $payload = $this->fetchClientPayload($client, $baseUrl, $token, $cnpj);
-        $modules = $this->resolveModules($this->pickClient($payload, $cnpj));
+        $fields = $this->resolveModules($this->pickClient($payload, $cnpj));
 
         Db::connection('conciliador_web')
             ->table('contracts')
             ->where('id', $contractId)
-            ->update($modules);
+            ->update($fields);
+
+        // Os módulos já foram gravados; sem `empresas_contr` válido o company_count fica como está e o erro sobe.
+        if (! array_key_exists('company_count', $fields)) {
+            throw new RuntimeException("Manager API field 'empresas_contr' must be numeric.");
+        }
     }
 
     private function baseUrl(): string
@@ -193,17 +198,24 @@ class ContractModulesSyncService
 
     /**
      * @param array<mixed> $client
-     * @return array{has_open_finance_module: bool, has_confrontation_module: bool}
+     * @return array{has_open_finance_module: bool, has_confrontation_module: bool, company_count?: int}
      */
     private function resolveModules(array $client): array
     {
         $belvo = $client['belvo'] ?? null;
         $confronto = $client['confronto'] ?? null;
+        $companyCount = $client['empresas_contr'] ?? null;
 
-        return [
+        $fields = [
             'has_open_finance_module' => $belvo === 1 || $belvo === '1' || $belvo === true,
             'has_confrontation_module' => $confronto === null
                 || (is_string($confronto) && strcasecmp(trim($confronto), 'Sim') === 0),
         ];
+
+        if (is_int($companyCount) || (is_string($companyCount) && is_numeric($companyCount))) {
+            $fields['company_count'] = (int) $companyCount;
+        }
+
+        return $fields;
     }
 }

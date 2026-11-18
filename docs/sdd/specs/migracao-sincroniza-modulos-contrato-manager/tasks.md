@@ -23,6 +23,10 @@ Decisões já tomadas (respostas da spec, 2026-11-17):
   `company_count` mantém a regra atual (só sem erro nas entidades).
 - Sem backfill (Q5).
 - Alternativa "estender `ContractCompanyCountSyncService`" descartada (Q1).
+- 2026-11-18 (usuário): `empresas_contr` vem na mesma rota `/api/clientes`; centralizar o `company_count` em
+  `resolveModules` e remover `ContractCompanyCountSyncService` (D1b, T6). Isso substitui a regra "`company_count`
+  só sem erro nas entidades" acima.
+- 2026-11-18 (usuário): chave do erro em `error_summary` renomeada de `contract_modules` para `manager_integration` (D1c).
 - T5 (2026-11-18, fonte: orquestrador): a parte **opcional** da T5 (migração real em dev chamando o
   Manager de produção com CNPJ real e `MANAGER_SECRET`) **não** é executada nesta rodada — exige
   autorização explícita do usuário, que não foi dada. Nenhuma chamada HTTP ao Manager; fica registrada
@@ -124,14 +128,14 @@ verdes com o comando de testes; resultado registrado em `validation.md`.
 ## T3. Ligar o serviço no `MigrationOrchestrator` (D2)
 
 **Status:** concluída (2026-11-18)
-**Notas de execução:** `MigrationOrchestrator`: injeção de `ContractModulesSyncService`, `$entitiesHadErrors = $errorSummary !== []` logo após o loop, `sync($contractId)` sem condição em `try/catch` próprio (`error_summary['contract_modules']` + `logger->error`), e o bloco do `company_count` passou a usar `if (! $entitiesHadErrors)`; `markCompleted` inalterado. Como o job é abortado no loop quando `contracts` falha, "sem condição" equivale a "sempre que `contracts` teve sucesso" (inclui a retomada com `contracts` já `completed`, idempotente — RF7). Testes: os 3 antigos que chegam ao fim do loop ganharam o mock de módulos (`createSuccessfulModulesSyncService()`, `sync` uma vez); `testRunAbortsWhenContractsEntityFails` injeta os dois serviços com `shouldNotReceive('sync')`. 4 testes novos conforme o plano; os novos conferem o `error_summary` exato. `testRunStillSyncsCompanyCountWhenContractModulesSyncFails` faz o `company_count` também falhar, para provar que os dois passos são independentes e que as duas chaves são registradas (RF6). `php-cs-fixer --dry-run` sem ajustes. `composer analyse`: só o erro já existente em `config/autoload/async_queue.php:36`.
+**Notas de execução:** `MigrationOrchestrator`: injeção de `ContractModulesSyncService`, `$entitiesHadErrors = $errorSummary !== []` logo após o loop, `sync($contractId)` sem condição em `try/catch` próprio (`error_summary['manager_integration']` + `logger->error`), e o bloco do `company_count` passou a usar `if (! $entitiesHadErrors)`; `markCompleted` inalterado. Como o job é abortado no loop quando `contracts` falha, "sem condição" equivale a "sempre que `contracts` teve sucesso" (inclui a retomada com `contracts` já `completed`, idempotente — RF7). Testes: os 3 antigos que chegam ao fim do loop ganharam o mock de módulos (`createSuccessfulModulesSyncService()`, `sync` uma vez); `testRunAbortsWhenContractsEntityFails` injeta os dois serviços com `shouldNotReceive('sync')`. 4 testes novos conforme o plano; os novos conferem o `error_summary` exato. `testRunStillSyncsCompanyCountWhenContractModulesSyncFails` faz o `company_count` também falhar, para provar que os dois passos são independentes e que as duas chaves são registradas (RF6). `php-cs-fixer --dry-run` sem ajustes. `composer analyse`: só o erro já existente em `config/autoload/async_queue.php:36`.
 **Objetivo:** em `app/Service/MigrationOrchestrator.php`:
 - Injetar `#[Inject] protected ContractModulesSyncService $contractModulesSyncService;` junto das
   outras injeções (`:24-38`).
 - Logo após o `foreach` (`:87-142`), guardar `$entitiesHadErrors = $errorSummary !== [];`.
 - Chamar `$this->contractModulesSyncService->sync($contractId)` **sem condição**, em `try/catch (Throwable)`
-  próprio: na falha, `$errorSummary['contract_modules'] = $e->getMessage();` e
-  `$this->logger->error("[job {$jobId}] contract modules sync failed: " . $e->getMessage());`
+  próprio: na falha, `$errorSummary['manager_integration'] = $e->getMessage();` e
+  `$this->logger->error("[job {$jobId}] manager integration failed: " . $e->getMessage());`
   (mensagem já sanitizada pelo serviço — T2).
 - Trocar `if (empty($errorSummary))` (`:144`) por `if (! $entitiesHadErrors)` no bloco do
   `company_count`, sem outra mudança nele.
@@ -146,7 +150,7 @@ verdes com o comando de testes; resultado registrado em `validation.md`.
     - `testRunSyncsContractModulesEvenWhenAnEntityCompletesWithErrors` — `users` com erro: módulos
       sincronizam, `company_count` não (CA6).
     - `testRunMarksCompletedWithErrorsWhenContractModulesSyncFails` — `markCompleted` com
-      `error_summary['contract_modules']` e `markFailed` nunca (CA5).
+      `error_summary['manager_integration']` e `markFailed` nunca (CA5).
     - `testRunStillSyncsCompanyCountWhenContractModulesSyncFails` — sem erro nas entidades, módulos
       falham e `company_count` roda mesmo assim (CA6).
 **Critério de pronto:** `MigrationOrchestratorTest` todo verde (4 antigos + 4 novos);
@@ -158,7 +162,7 @@ verdes com o comando de testes; resultado registrado em `validation.md`.
 ## T4. Env e documentação (D1, D3)
 
 **Status:** concluída (2026-11-18)
-**Notas de execução:** `.env.example`: abaixo de `MANAGER_API_TIMEOUT`, `MANAGER_API_URL=https://manager.conciliadorcontabil.com.br` e `MANAGER_SECRET=` (vazio), com comentários (mesmo secret do conciliadorweb; vazio faz o passo falhar em `error_summary['contract_modules']`). `docs/ai/architecture.md`: no diagrama do passo 5, `ExportLayoutSyncService::sync()` virou nota de desligado e entraram `ContractModulesSyncService::sync()` (sempre que `contracts` teve sucesso) e `ContractCompanyCountSyncService::sync()` (só sem erro nas entidades); abaixo do diagrama, 3 itens com endpoints, envs, regra de mapeamento e chaves do `error_summary`. `.env`/`.env.prod` intocados; `git diff` conferido: nenhum valor de secret/token (só o placeholder `{MANAGER_SECRET}` no doc). Nenhum outro arquivo de `docs/ai/` lista essas envs. Sem testes (só docs/env).
+**Notas de execução:** `.env.example`: abaixo de `MANAGER_API_TIMEOUT`, `MANAGER_API_URL=https://manager.conciliadorcontabil.com.br` e `MANAGER_SECRET=` (vazio), com comentários (mesmo secret do conciliadorweb; vazio faz o passo falhar em `error_summary['manager_integration']`). `docs/ai/architecture.md`: no diagrama do passo 5, `ExportLayoutSyncService::sync()` virou nota de desligado e entraram `ContractModulesSyncService::sync()` (sempre que `contracts` teve sucesso) e `ContractCompanyCountSyncService::sync()` (só sem erro nas entidades); abaixo do diagrama, 3 itens com endpoints, envs, regra de mapeamento e chaves do `error_summary`. `.env`/`.env.prod` intocados; `git diff` conferido: nenhum valor de secret/token (só o placeholder `{MANAGER_SECRET}` no doc). Nenhum outro arquivo de `docs/ai/` lista essas envs. Sem testes (só docs/env).
 **Objetivo:**
 - `.env.example`: abaixo de `MANAGER_API_TIMEOUT` (`:85`), adicionar
   `MANAGER_API_URL=https://manager.conciliadorcontabil.com.br` e `MANAGER_SECRET=` (vazio, com
@@ -193,3 +197,11 @@ arquivo versionado (`git diff` conferido).
 **Critério de pronto:** CA1–CA8 verificados por teste e registrados; pendências de deploy anotadas.
 **Dependências:** T1–T4.
 **Cobre Critério de Aceite:** todos.
+
+## T6. Centralizar `company_count` na chamada a `/api/clientes` (D1b)
+
+**Status:** concluída (2026-11-18)
+**Notas de execução:** `ContractModulesSyncService::resolveModules()` lê `empresas_contr` (int ou string numérica → `(int)`) e inclui `company_count` no mesmo `update`; ausente/`null`/não numérico → grava só os módulos e lança `Manager API field 'empresas_contr' must be numeric.` (vira `error_summary['manager_integration']`). `MigrationOrchestrator`: removidos a injeção de `ContractCompanyCountSyncService`, `$entitiesHadErrors` e o bloco do `company_count`. Removidos `app/Service/ContractCompanyCountSyncService.php`, `test/Cases/Unit/Service/ContractCompanyCountSyncServiceTest.php` e `MANAGER_API_BASE_URL` do `.env.example`. A alteração local não commitada no serviço removido (host padrão `managerv2api` → `manager`) ficou sem efeito. Testes: `ContractModulesSyncServiceTest` com `company_count` nos `update` esperados + 4 casos novos (string numérica; ausente, `null`, texto); `MigrationOrchestratorTest` sem os 4 testes do passo removido (ficam 4). `docs/ai/architecture.md` atualizado.
+**Objetivo:** uma só chamada ao Manager grava `has_open_finance_module`, `has_confrontation_module` e `company_count`.
+**Dependências:** T1–T5.
+**Cobre Critério de Aceite:** CA6, CA7 (revistos).
