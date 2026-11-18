@@ -34,7 +34,7 @@ class MigrationOrchestrator
     protected ExportLayoutSyncService $exportLayoutSyncService;
 
     #[Inject]
-    protected ContractCompanyCountSyncService $contractCompanyCountSyncService;
+    protected ContractModulesSyncService $contractModulesSyncService;
 
     private LoggerInterface $logger;
 
@@ -141,13 +141,13 @@ class MigrationOrchestrator
             }
         }
 
-        if (empty($errorSummary)) {
-            try {
-                $this->contractCompanyCountSyncService->sync($contractId);
-            } catch (Throwable $e) {
-                $errorSummary['contract_company_count'] = $e->getMessage();
-                $this->logger->error("[job {$jobId}] contract company_count sync failed: " . $e->getMessage());
-            }
+        // Roda sempre que `contracts` teve sucesso (senão o job já foi abortado acima), mesmo com erro em outras entidades.
+        // Uma chamada ao Manager grava os módulos e o company_count do contrato.
+        try {
+            $this->contractModulesSyncService->sync($contractId);
+        } catch (Throwable $e) {
+            $errorSummary['manager_integration'] = $e->getMessage();
+            $this->logger->error("[job {$jobId}] manager integration failed: " . $e->getMessage());
         }
 
         $this->jobService->markCompleted($jobId, $errorSummary ?: null);
