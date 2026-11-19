@@ -8,7 +8,7 @@ Ordem sugerida: T1 (baseline) → T2 (serviço) → T3 (orquestrador) → T4 (en
 T2 e T4 são independentes entre si; T3 depende de T2. O ganho funcional aparece em T3.
 
 Decisões já tomadas (respostas da spec, 2026-11-17):
-- Endpoint: `POST {MANAGER_API_URL}/api/clientes?cnpj=<CNPJ formatado 99.999.999/9999-99>` — só
+- Endpoint: `GET {MANAGER_API_URL}/api/clientes?cnpj=<CNPJ formatado 99.999.999/9999-99>` — só
   dígitos não encontra o cliente (Q1, Q6).
 - Autenticação: `POST {MANAGER_API_URL}/api/get-token?secret={MANAGER_SECRET}` → `data.access_token`
   → `Authorization: Bearer` (Q2, P7). Sem cache de token.
@@ -87,7 +87,7 @@ verdes com o comando de testes; resultado registrado em `validation.md`.
   4. `formatCnpj()`; ≠ 14 dígitos → exceção.
   5. `fetchToken()`: `POST {base}/api/get-token`, `query: ['secret' => …]`, `http_errors => false`;
      não 2xx, JSON inválido ou `data.access_token` vazio/não-string → exceção.
-  6. `fetchClientPayload()`: `POST {base}/api/clientes`, `query: ['cnpj' => <formatado>]`,
+  6. `fetchClientPayload()`: `GET {base}/api/clientes` (era POST; corrigido em T7), `query: ['cnpj' => <formatado>]`,
      `headers: ['Authorization' => 'Bearer ' . $token, 'Accept' => 'application/json']`,
      `http_errors => false`; não 2xx ou JSON inválido → exceção.
   7. `pickClient($payload, $cnpjFormatado)`: `api_status` ≠ 1, `data` ausente/não-lista/vazia →
@@ -205,3 +205,10 @@ arquivo versionado (`git diff` conferido).
 **Objetivo:** uma só chamada ao Manager grava `has_open_finance_module`, `has_confrontation_module` e `company_count`.
 **Dependências:** T1–T5.
 **Cobre Critério de Aceite:** CA6, CA7 (revistos).
+
+## T7. `/api/clientes` via GET (D1d) + validação ponta a ponta
+
+**Status:** concluída (2026-11-19)
+**Notas de execução:** a migração real de `cont_welingtonmenezes` em dev terminou `completed_with_errors` com `manager_integration: Manager API did not return the client.` e nada gravado. Diagnóstico direto do container (só estrutura da resposta, sem dados pessoais): `get-token` OK; `/api/clientes` com POST (query, form, multipart) → HTTP 200, `api_status: 0`, "The requested method is not allowed!"; com GET + CNPJ formatado na query → `api_status: 1`, 1 item com `cnpj` igual. `ContractModulesSyncService`: `postJson()` virou `requestJson($client, $method, …)` com `Client::request()`; `get-token` em POST, `/api/clientes` em GET. Teste: o mock passou a `request` (com `shouldNotReceive('post', 'get')`) e o teste principal confere o método de cada chamada. Reexecução do job (`php bin/hyperf.php migration:run-job <job>`, entidades concluídas puladas) → contrato com `has_open_finance_module = true`, `has_confrontation_module = true`, `company_count = 62`; job `completed`. Achado fora do escopo: `MigrationJobService::markCompleted()` só grava `error_summary` quando não é `null`, então o erro da execução anterior continua no job reexecutado sem erro.
+**Dependências:** T6.
+**Cobre Critério de Aceite:** CA1, CA6b (método), validação ponta a ponta pendente da T5.
