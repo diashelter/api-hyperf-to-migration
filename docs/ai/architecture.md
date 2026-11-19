@@ -196,7 +196,7 @@ Redis async-queue
 
 Passo pós-loop (falha vira `error_summary['manager_integration']` e o job termina `completed_with_errors`):
 
-- `ContractModulesSyncService`: `POST {MANAGER_API_URL}/api/get-token?secret={MANAGER_SECRET}` → Bearer; `POST {MANAGER_API_URL}/api/clientes?cnpj=<99.999.999/9999-99>`; usa o item de `data[]` com `cnpj` igual (senão o primeiro). Timeout `MANAGER_API_TIMEOUT`. Erro em `error_summary['manager_integration']`, sem secret, token, CNPJ ou corpo da resposta.
+- `ContractModulesSyncService`: `POST {MANAGER_API_URL}/api/get-token?secret={MANAGER_SECRET}` → Bearer; `GET {MANAGER_API_URL}/api/clientes?cnpj=<99.999.999/9999-99>` (POST responde 200 com `api_status: 0`, "method not allowed"); usa o item de `data[]` com `cnpj` igual (senão o primeiro). Timeout `MANAGER_API_TIMEOUT`. Erro em `error_summary['manager_integration']`, sem secret, token, CNPJ ou corpo da resposta.
 - Mapeamento num único `update` em `contracts`: `belvo` ∈ {`1`, `"1"`, `true`} → `has_open_finance_module = true`, senão `false`; `confronto == "Sim"` (trim, sem diferenciar maiúsculas) ou ausente/`null` → `has_confrontation_module = true`, outro valor → `false`; `empresas_contr` numérico → `company_count`. Cliente não retornado (`api_status != 1`, `data` vazio/não-lista) ou falha HTTP → nenhum `update` (vale o default da coluna). `empresas_contr` ausente ou não numérico → grava só os módulos, mantém o `company_count` e registra o erro.
 
 Configuração da fila:

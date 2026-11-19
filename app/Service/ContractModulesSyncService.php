@@ -108,7 +108,7 @@ class ContractModulesSyncService
 
     private function fetchToken(Client $client, string $baseUrl, string $secret): string
     {
-        $payload = $this->postJson($client, $baseUrl . '/api/get-token', [
+        $payload = $this->requestJson($client, 'POST', $baseUrl . '/api/get-token', [
             'http_errors' => false,
             'query' => ['secret' => $secret],
         ], 'token');
@@ -123,11 +123,13 @@ class ContractModulesSyncService
     }
 
     /**
+     * O Manager só aceita GET em /api/clientes (POST responde 200 com api_status 0, "method not allowed").
+     *
      * @return array<mixed>
      */
     private function fetchClientPayload(Client $client, string $baseUrl, string $token, string $cnpj): array
     {
-        return $this->postJson($client, $baseUrl . '/api/clientes', [
+        return $this->requestJson($client, 'GET', $baseUrl . '/api/clientes', [
             'http_errors' => false,
             'query' => ['cnpj' => $cnpj],
             'headers' => [
@@ -141,11 +143,11 @@ class ContractModulesSyncService
      * @param array<string, mixed> $options
      * @return array<mixed>
      */
-    private function postJson(Client $client, string $url, array $options, string $step): array
+    private function requestJson(Client $client, string $method, string $url, array $options, string $step): array
     {
         try {
             /** @var ResponseInterface $response */
-            $response = $client->post($url, $options);
+            $response = $client->request($method, $url, $options);
         } catch (Throwable $e) {
             // A mensagem do Guzzle traz a URL (com o secret na query): não repassar.
             throw new RuntimeException(sprintf('Manager API %s request failed (%s).', $step, $e::class));

@@ -108,7 +108,7 @@ nem afete o `company_count`.
 
 - **RF1.** Ao fim de `MigrationOrchestrator::run()`, sempre que a entidade `contracts` terminou com
   sucesso — **independentemente** de erro em outras entidades (Q4) —, o hyperf obtém o token
-  (P7) e faz `POST /api/clientes?cnpj=` no Manager com o CNPJ do contrato de destino **formatado**
+  (P7) e faz `GET /api/clientes?cnpj=` (D1d) no Manager com o CNPJ do contrato de destino **formatado**
   (`99.999.999/9999-99`). O Manager não encontra o cliente com o CNPJ só em dígitos (Q6).
   `contracts.cpf_cnpj` guarda só dígitos (`ContractSource.php:61`); valor sem exatamente 14 dígitos
   → erro (RF5).
@@ -159,7 +159,7 @@ nem afete o `company_count`.
 - Autenticação conforme P7, em duas chamadas no mesmo `sync()`:
   `POST {MANAGER_API_URL}/api/get-token` com `query: ['secret' => …]` → `data.access_token` (string
   não vazia, senão `RuntimeException`); depois
-  `POST {MANAGER_API_URL}/api/clientes` com `query: ['cnpj' => <CNPJ formatado>]` e header
+  `GET {MANAGER_API_URL}/api/clientes` (D1d) com `query: ['cnpj' => <CNPJ formatado>]` e header
   `Authorization: Bearer {token}`. Sem cache do token: é uma chamada por migração.
 - Formatação do CNPJ num método privado puro (`formatCnpj(string $digits): string`, máscara
   `%s.%s.%s/%s-%s` sobre 2-3-3-4-2 dígitos); menos ou mais de 14 dígitos → `RuntimeException`.
@@ -182,6 +182,10 @@ nem afete o `company_count`.
   (a chave `contract_company_count` deixa de existir).
 - **D1c (2026-11-18, pedido do usuário).** A chave de erro do passo passa de `contract_modules` para
   `manager_integration` (log: `manager integration failed`); todas as referências desta spec já usam o nome novo.
+- **D1d (2026-11-19, teste real com `cont_welingtonmenezes`).** `/api/clientes` do Manager só aceita **GET**:
+  com POST (query, form ou multipart) responde HTTP 200 com `api_status: 0` e `"The requested method is not allowed!"`,
+  o que fazia o passo falhar com `Manager API did not return the client.`. O `get-token` continua em POST.
+  A pergunta do endpoint (Q1) e a resposta original citam POST; o método correto é GET.
 - Erros em `RuntimeException` com mensagem curta em inglês (padrão do arquivo irmão), sem corpo da
   resposta (nem trecho — RNF2b) e sem a mensagem crua do Guzzle (traz a URL com o secret — RNF2).
   Diferente do `DatabaseConnectionService::summarizeBody` do conciliadorweb, que loga 500 caracteres.
