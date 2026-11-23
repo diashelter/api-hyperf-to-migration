@@ -444,11 +444,51 @@ Entidades suportadas:
 - `layouts_admin`
 - `permissions`
 
+As linhas são gravadas e lidas com `environment = APP_ENV` do container que executa.
+
+### Atualização automática de `layouts_admin`
+
+`layouts_admin` é atualizado **a cada minuto** pela tarefa de crontab `seed-lookup-layouts-admin`
+(`config/autoload/crontab.php` → `App\Crontab\SeedLayoutsAdminLookupTask::execute()`, que chama
+`LookupCacheService::seedWithChanges('layouts_admin')`). Corresponde ao
+`SyncAdminLayoutsJob` do conciliadorweb, que traz os layouts admin para o `conciliador_web` no mesmo
+regime (a cada minuto, um servidor só).
+
+- **Um container por vez, sem sobreposição:** `onOneServer` + `singleton`, com trava no Redis
+  `default` (compartilhado). O container que pega a trava de servidor a mantém enquanto vive; se cair
+  sem desligar, outro assume em até `mutexExpires` (90 s). O nome da tarefa não leva `APP_ENV`.
+- **Processo:** `Hyperf\Crontab\Process\CrontabDispatcherProcess` está em
+  `config/autoload/processes.php` e sobe em todo container (`migrator` e cada `migrator-worker`); a
+  tarefa roda num worker HTTP.
+- **Ligar/desligar:** ligado por padrão em todos os ambientes; `CRONTAB_ENABLE=false` desliga o
+  dispatcher (dev, teste, incidente), sem deploy de código.
+- **Logs:**
+  - a tarefa loga no canal `lookup-cache` em `info` **só quando o seed muda algo** (contagens de
+    inseridos/atualizados/removidos) e em `error` quando falha; a falha não é relançada — o minuto
+    seguinte faz o papel do retry;
+  - o logger do crontab (`Hyperf\Crontab\LoggerInterface` → `App\Crontab\WarningLevelCrontabLogger`,
+    bind em `config/autoload/dependencies.php`) descarta `info`, `notice` e `debug` e repassa ao
+    stdout só `warning` ou acima — some o "executed successfully"/"skipped ... server mutex" de cada
+    minuto;
+  - a tarefa liga `DbQueryExecutedListener::SKIP_LOG_CONTEXT_KEY` no `Context` da corrotina durante o
+    seed (removida num `finally`), e o `DbQueryExecutedListener` não grava essas queries no canal
+    `sql` (cada seed seriam ~200 KB no `hyperf.log`). O comando manual, as migrações e o resto da
+    aplicação continuam logando SQL normalmente.
+
+`roles`, `status` e `permissions` continuam manuais (comando acima), assim como um seed imediato de
+`layouts_admin` quando não se quer esperar o próximo minuto.
+
 Uso atual:
 
 - `ContractSource` resolve `status_contract` usando `lookup_cache.status`;
 - `ContractUserSource` resolve role `owner`/`user` usando `lookup_cache.roles`;
-- `CompanyLayoutSource` usa mappings de `layouts_admin`, alimentados por `ExportLayoutSyncService`.
+- `LayoutSource` preenche `layouts.layouts_admin_id` pelo código (`< 1000` ou `> 5000`) usando
+  `lookup_cache.layouts_admin`;
+- `CompanyLayoutSource` preenche `company_layout.layout_exp` usando `lookup_cache.layouts_admin`
+  (o `ExportLayoutSyncService::sync()` está desligado em `MigrationOrchestrator`; os layouts de
+  exportação chegam ao destino pelo conciliadorweb).
+
+Código ausente do cache resolve `null` sem erro.
 
 ---
 

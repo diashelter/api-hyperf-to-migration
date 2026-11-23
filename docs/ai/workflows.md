@@ -27,6 +27,7 @@ docker exec conciliador-migrator php bin/hyperf.php migrate
 docker exec conciliador-migrator php bin/hyperf.php migrate:status
 
 # Popular lookup_cache a partir do conciliador_web
+# (layouts_admin já é atualizado a cada minuto pelo crontab; ver "Lookup cache" em architecture.md)
 docker exec conciliador-migrator php bin/hyperf.php migration:seed-lookups
 docker exec conciliador-migrator php bin/hyperf.php migration:seed-lookups roles
 ```

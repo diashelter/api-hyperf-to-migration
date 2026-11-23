@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Unit\Listener;
 
 use App\Listener\DbQueryExecutedListener;
+use Hyperf\Context\Context;
 use Hyperf\Database\Connection;
 use Hyperf\Database\ConnectionInterface;
 use Hyperf\Database\Events\QueryExecuted;
@@ -70,6 +71,38 @@ final class DbQueryExecutedListenerTest extends UnitTestCase
                 7.1,
                 $this->createConnection()
             )
+        );
+    }
+
+    public function testProcessDoesNotLogWhenSkipFlagIsSetInContext(): void
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->never())->method('info');
+
+        $listener = $this->createListener($logger);
+
+        Context::set(DbQueryExecutedListener::SKIP_LOG_CONTEXT_KEY, true);
+        try {
+            $listener->process(
+                new QueryExecuted('select 1', [], 1.0, $this->createConnection())
+            );
+        } finally {
+            Context::destroy(DbQueryExecutedListener::SKIP_LOG_CONTEXT_KEY);
+        }
+    }
+
+    public function testProcessLogsAgainAfterSkipFlagIsRemoved(): void
+    {
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('info')->with('[1] select 1');
+
+        $listener = $this->createListener($logger);
+
+        Context::set(DbQueryExecutedListener::SKIP_LOG_CONTEXT_KEY, true);
+        Context::destroy(DbQueryExecutedListener::SKIP_LOG_CONTEXT_KEY);
+
+        $listener->process(
+            new QueryExecuted('select 1', [], 1.0, $this->createConnection())
         );
     }
 
