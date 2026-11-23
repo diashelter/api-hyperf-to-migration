@@ -13,6 +13,10 @@ docker compose logs -f migrator               # tail dos logs da API
 docker compose logs -f migrator-postgres      # tail do banco
 ```
 
+O log da aplicação (inclusive o SQL do canal `sql`) fica em `runtime/logs/hyperf-AAAA-MM-DD.log`,
+um arquivo por dia (`RotatingFileHandler`, `config/autoload/logger.php`). Os últimos
+`LOG_MAX_FILES` dias são mantidos (padrão 7); os mais antigos são apagados na virada do dia.
+
 ---
 
 ## Aplicação (dentro de `conciliador-migrator`)
@@ -27,6 +31,7 @@ docker exec conciliador-migrator php bin/hyperf.php migrate
 docker exec conciliador-migrator php bin/hyperf.php migrate:status
 
 # Popular lookup_cache a partir do conciliador_web
+# (layouts_admin já é atualizado a cada minuto pelo crontab; ver "Lookup cache" em architecture.md)
 docker exec conciliador-migrator php bin/hyperf.php migration:seed-lookups
 docker exec conciliador-migrator php bin/hyperf.php migration:seed-lookups roles
 ```

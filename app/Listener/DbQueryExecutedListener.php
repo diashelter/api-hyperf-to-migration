@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace App\Listener;
 
 use Hyperf\Collection\Arr;
+use Hyperf\Context\Context;
 use Hyperf\Database\Events\QueryExecuted;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
@@ -23,6 +24,13 @@ use Psr\Log\LoggerInterface;
 #[Listener]
 class DbQueryExecutedListener implements ListenerInterface
 {
+    /**
+     * Com esta chave verdadeira no Context da corrotina, as queries não são logadas.
+     * Usada por tarefas de crontab que rodam a cada minuto (RNF4 da spec
+     * agendamento-seed-lookup-layouts-admin); o log SQL do resto da aplicação não muda.
+     */
+    public const SKIP_LOG_CONTEXT_KEY = 'db_query_log.skip';
+
     /**
      * @var LoggerInterface
      */
@@ -45,6 +53,10 @@ class DbQueryExecutedListener implements ListenerInterface
      */
     public function process(object $event): void
     {
+        if (Context::get(self::SKIP_LOG_CONTEXT_KEY) === true) {
+            return;
+        }
+
         if ($event instanceof QueryExecuted) {
             $sql = $event->sql;
             if (! Arr::isAssoc($event->bindings)) {

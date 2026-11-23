@@ -38,6 +38,15 @@ class LookupCacheService
      */
     public function seed(string $entity): int
     {
+        return $this->seedWithChanges($entity)->total;
+    }
+
+    /**
+     * Mesmo seed de seed(), devolvendo também o que mudou no cache do ambiente:
+     * ids novos (inserted), ids com label diferente (updated) e ids removidos (removed).
+     */
+    public function seedWithChanges(string $entity): LookupSeedResult
+    {
         if (! isset(self::ENTITIES[$entity])) {
             throw new InvalidArgumentException("Entity '{$entity}' is not supported for lookup caching.");
         }
@@ -57,7 +66,7 @@ class LookupCacheService
             ->toArray();
 
         if (empty($rows)) {
-            return 0;
+            return new LookupSeedResult($entity, 0, 0, 0, 0);
         }
 
         $records = [];
@@ -73,8 +82,16 @@ class LookupCacheService
             ];
         }
 
+        $cachedLabels = Db::table('lookup_cache')
+            ->where('entity', $entity)
+            ->where('environment', $env)
+            ->pluck('label', 'external_id')
+            ->toArray();
+
+        [$inserted, $updated] = $this->countInsertedAndUpdated($records, $cachedLabels);
+
         $externalIds = array_column($records, 'external_id');
-        Db::table('lookup_cache')
+        $removed = (int) Db::table('lookup_cache')
             ->where('entity', $entity)
             ->where('environment', $env)
             ->whereNotIn('external_id', $externalIds)
@@ -89,7 +106,7 @@ class LookupCacheService
             );
         }
 
-        return count($records);
+        return new LookupSeedResult($entity, count($records), $inserted, $updated, $removed);
     }
 
     /**
@@ -158,6 +175,34 @@ class LookupCacheService
     public static function supportedEntities(): array
     {
         return array_keys(self::ENTITIES);
+    }
+
+    /**
+     * Compara os registros da origem com o cache atual [external_id => label].
+     *
+     * @return array{0: int, 1: int} [inseridos, atualizados]
+     */
+    private function countInsertedAndUpdated(array $records, array $cachedLabels): array
+    {
+        $inserted = 0;
+        $updated = 0;
+        foreach ($records as $record) {
+            if (! array_key_exists($record['external_id'], $cachedLabels)) {
+                ++$inserted;
+                continue;
+            }
+
+            if ($this->normalizeLabel($record['label']) !== $this->normalizeLabel($cachedLabels[$record['external_id']])) {
+                ++$updated;
+            }
+        }
+
+        return [$inserted, $updated];
+    }
+
+    private function normalizeLabel(mixed $label): ?string
+    {
+        return $label === null ? null : (string) $label;
     }
 
     private function getEnvironment(): string
