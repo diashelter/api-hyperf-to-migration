@@ -55,9 +55,9 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
     private const COMPANY_COUNT = 62;
 
     /**
-     * Chamadas feitas ao Client mockado: lista de [url, options].
+     * Chamadas feitas ao Client mockado: lista de [url, options, method].
      *
-     * @var list<array{0: string, 1: array<string, mixed>}>
+     * @var list<array{0: string, 1: array<string, mixed>, 2: string}>
      */
     private array $calls = [];
 
@@ -85,12 +85,15 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
 
         $this->assertCount(2, $this->calls);
 
-        [$tokenUrl, $tokenOptions] = $this->calls[0];
+        [$tokenUrl, $tokenOptions, $tokenMethod] = $this->calls[0];
+        $this->assertSame('POST', $tokenMethod);
         $this->assertSame('https://manager.example.test/api/get-token', $tokenUrl);
         $this->assertSame(['secret' => self::SECRET], $tokenOptions['query']);
         $this->assertFalse($tokenOptions['http_errors']);
 
-        [$clientsUrl, $clientsOptions] = $this->calls[1];
+        // O Manager só aceita GET em /api/clientes; POST responde api_status 0 ("method not allowed").
+        [$clientsUrl, $clientsOptions, $clientsMethod] = $this->calls[1];
+        $this->assertSame('GET', $clientsMethod);
         $this->assertSame('https://manager.example.test/api/clientes', $clientsUrl);
         $this->assertSame(['cnpj' => self::CNPJ_FORMATTED], $clientsOptions['query']);
         $this->assertSame('Bearer ' . self::TOKEN, $clientsOptions['headers']['Authorization']);
@@ -380,7 +383,7 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
         $url = 'https://manager.example.test/api/clientes?cnpj=' . urlencode(self::CNPJ_FORMATTED);
         $exception = new ConnectException(
             'cURL error 28: timeout for ' . $url . ' Bearer ' . self::TOKEN,
-            new Request('POST', $url),
+            new Request('GET', $url),
         );
 
         $service = $this->createService([$this->tokenResponse(), $exception], null);
@@ -458,9 +461,10 @@ final class ContractModulesSyncServiceTest extends UnitTestCase
         }
 
         $client = Mockery::mock(Client::class);
-        $client->shouldReceive('post')
-            ->andReturnUsing(function (string $url, array $options) use (&$responses): Response {
-                $this->calls[] = [$url, $options];
+        $client->shouldNotReceive('post', 'get');
+        $client->shouldReceive('request')
+            ->andReturnUsing(function (string $method, string $url, array $options) use (&$responses): Response {
+                $this->calls[] = [$url, $options, $method];
                 $response = array_shift($responses);
 
                 if ($response instanceof Throwable) {

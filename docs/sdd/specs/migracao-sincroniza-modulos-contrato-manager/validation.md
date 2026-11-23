@@ -81,6 +81,17 @@ chamado 0 — chamada comentada no orquestrador pelo commit `af7b59a`).
 - CA6/CA7 revistos (D1b): `ContractCompanyCountSyncServiceTest` removido junto com o serviço; a linha CA6/CA7 da tabela
   abaixo descreve a rodada de T5, antes da centralização.
 
+### T7 — GET em `/api/clientes` + ponta a ponta (2026-11-19)
+- Ponta a ponta com o Manager de produção, autorizado pelo usuário, base `cont_welingtonmenezes` em dev:
+  - antes da correção: job `completed_with_errors`, `manager_integration: Manager API did not return the client.`; contrato
+    com os defaults (`company_count = 0`, open finance `false`, confronto `true`). Causa: POST em `/api/clientes` → `api_status: 0`
+    ("The requested method is not allowed!"); GET → cliente retornado.
+  - depois (job reexecutado com `migration:run-job`): `has_open_finance_module = true`, `has_confrontation_module = true`,
+    `company_count = 62`; job `completed`. O `error_summary` antigo permanece (comportamento existente de `markCompleted`).
+- `vendor/bin/phpunit -c phpunit.unit.xml.dist test/Cases/Unit/Service/ContractModulesSyncServiceTest.php test/Cases/Unit/Service/MigrationOrchestratorTest.php`
+  → OK (35 tests, 255 assertions).
+- A pendência "validação ponta a ponta com o Manager real" abaixo fica resolvida por esta entrada.
+
 #### Medições finais / resultado por CA
 
 | CA | Verificação | Resultado |
