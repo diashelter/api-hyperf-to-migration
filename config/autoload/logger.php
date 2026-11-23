@@ -10,8 +10,10 @@ declare(strict_types=1);
  * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
  */
 use Monolog\Formatter\LineFormatter;
-use Monolog\Handler\StreamHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
+
+use function Hyperf\Support\env;
 
 /*
  * This file is part of Hyperf.
@@ -21,12 +23,18 @@ use Monolog\Logger;
  * @contact  group@hyperf.io
  * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
  */
+/*
+ * Um arquivo por dia (runtime/logs/hyperf-AAAA-MM-DD.log). Na virada do dia o Monolog apaga os
+ * arquivos além de LOG_MAX_FILES (padrão 7 dias). O log SQL das migrações gera centenas de MB por
+ * dia; sem rotação o arquivo único chegou a 1,7 GB em seis dias.
+ */
 return [
     'default' => [
         'handler' => [
-            'class' => StreamHandler::class,
+            'class' => RotatingFileHandler::class,
             'constructor' => [
-                'stream' => BASE_PATH . '/runtime/logs/hyperf.log',
+                'filename' => BASE_PATH . '/runtime/logs/hyperf.log',
+                'maxFiles' => max(1, (int) env('LOG_MAX_FILES', 7)),
                 'level' => Logger::DEBUG,
             ],
         ],
